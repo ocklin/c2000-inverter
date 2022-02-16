@@ -187,6 +187,42 @@ void PwmDriver::SetOverCurrentLimits(int16_t limNeg, int16_t limPos)
  * \param[in] base The EPWM module to configure
  * \param[in] pwmmax The PWM period
  * \param[in] deadBandCount The size of the deadband in PWM counts
+ * 
+ * Gate driver STGAP1 has it's own DeadTime (DT) detection that needs to fit 
+ * PWM generation's DT coming from MCU. 
+ *    Thus MCU DT must be longer than the gate drivers.
+ *
+ * If DT detection is enabled in the gate driver it is required that  
+ * IN- FED must come before IN+ RED 
+ * but 
+ * IN- RED does not need to come before IN+ FED
+ *
+ * However, as odd chip IN- is even chip IN+ and vice versa, 
+ *   shifted deadtime or complentary deadtimes are the solution.
+ * 
+ * There are 3 basic options for configuring deadbands.
+ * 
+ * 1) Synchrounous DT, 
+ *   i.e. A Raising Edge (RE) / B Falling Edge (FE) and 
+ *        A Falling Edge (FE) / B Raising Edge (RE) 
+ *   happen at the same time.
+ *   This triggers DT detection error in the gate driver (by experiment).
+ * 
+ * 2) Shifting MCU DT is another option 
+ *   It uses the full duty cyle on both A and B but shifts A/B phases by DT
+ *   i.e. A's Raising Edge Delayed (RED)
+ *        B's Falling Edge Delayed (FED)
+ *   But as soon as the duty cycle is short enough to have the gate driver's 
+ *   IN+ RE to reach into the gate driver's Dead Band time, we trigger a DT error again.
+ *   This can be protected against by using 2 x mimimum gate driver DT 
+ *     as the shortest allowed duty cycle.
+ * 
+ * 3) Complementary MCU DT is the option choosen here
+ *   - Complementary Active Low mode
+ *   - A active low, B is active high - A RED, B FED
+ *   - it is simple to configure 
+ *   - it has a natural protection against running into gate driver's DT detection
+ *      Reason is that PWM will turn off when below Deadband time.
  */
 static void initEPWM(uint32_t base, uint16_t pwmmax, uint16_t deadBandCount)
 {
@@ -240,7 +276,7 @@ static void initEPWM(uint32_t base, uint16_t pwmmax, uint16_t deadBandCount)
     EPWM_setRisingEdgeDelayCount(base, deadBandCount);
 
     //
-    // Invert only the Falling Edge delayed output (AHC)
+    // Invert only the Raising Edge delayed output (ALC)
     //
     EPWM_setDeadBandDelayPolarity(
         base, EPWM_DB_RED, EPWM_DB_POLARITY_ACTIVE_LOW);
