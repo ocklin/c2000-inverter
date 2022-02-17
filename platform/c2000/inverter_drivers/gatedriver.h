@@ -45,14 +45,8 @@ public:
         uint16_t* status,
         uint16_t  statusLen);
 
-    static uint16_t GetMaxStatusRegisters() 
-    {
-        return NumStatusErrorRegister;
-    }
-    static uint16_t GetMaxDriverChips()
-    {
-        return NumDriverChips;
-    }
+    static const uint16_t NumStatusErrorRegister = 3;
+    static const uint16_t NumDriverChips = 6;
 
 private:
     enum ChipMask
@@ -70,8 +64,6 @@ private:
     };
 
 private:
-    static const uint16_t NumStatusErrorRegister = 3;
-    static const uint16_t NumDriverChips = 6;
     static const Register GateDriverRegisterSetup[];
     static const uint16_t RegisterSetupSize;
     static const Register NullGateDriverRegister;
