@@ -259,9 +259,10 @@ static void initEPWM(uint32_t base, uint16_t pwmmax, uint16_t deadBandCount)
         base, EPWM_AQ_SW_SH_LOAD_ON_CNTR_PERIOD);
 
     // Action Qualifier SubModule Registers
+    // This mode is needed as the HV output is high when PWM A is high
     EPWM_setActionQualifierActionComplete(base, EPWM_AQ_OUTPUT_A,
-            (EPWM_ActionQualifierEventAction)(EPWM_AQ_OUTPUT_LOW_UP_CMPA |
-                                            EPWM_AQ_OUTPUT_HIGH_DOWN_CMPA));
+            (EPWM_ActionQualifierEventAction)(EPWM_AQ_OUTPUT_LOW_DOWN_CMPA |
+                                            EPWM_AQ_OUTPUT_HIGH_UP_CMPB));
 
     //
     // Use EPWMA as the input for both RED and FED
@@ -271,8 +272,9 @@ static void initEPWM(uint32_t base, uint16_t pwmmax, uint16_t deadBandCount)
 
     //
     // Set the RED and FED values
-    //
-    EPWM_setFallingEdgeDelayCount(base, deadBandCount);
+    // +1 is needed on the falling edge to compensate for 
+    //    sporadic and still unexplained skewness observed causing deadtime errors
+    EPWM_setFallingEdgeDelayCount(base, deadBandCount+1);
     EPWM_setRisingEdgeDelayCount(base, deadBandCount);
 
     //
