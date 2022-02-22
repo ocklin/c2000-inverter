@@ -25,6 +25,8 @@
 #include "errormessage.h"
 #include "params.h"
 #include "c2000/performancecounter.h"
+#include "c2000/currentvoltagedriver.h"
+#include "c2000/encoderdriver.h"
 
 namespace c2000 {
 
@@ -105,6 +107,9 @@ void PwmDriver::SetPhasePwm(uint32_t phaseA, uint32_t phaseB, uint32_t phaseC)
 {
     // Load in the phase values - these will be loaded from the shadow registers
     // when the counter reaches zero
+    // uint32_t registerOffset = EPWM_O_CMPA + (uint16_t)EPWM_COUNTER_COMPARE_A;
+    // HWREGH(sm_phaseAEpwmBase + registerOffset + 0x1U) = phaseA;
+    
     EPWM_setCounterCompareValue(
         sm_phaseAEpwmBase, EPWM_COUNTER_COMPARE_A, phaseA);
     EPWM_setCounterCompareValue(
@@ -116,7 +121,8 @@ void PwmDriver::SetPhasePwm(uint32_t phaseA, uint32_t phaseB, uint32_t phaseC)
 /** Store of number of SYSCLOCK ticks we spend running the main PWM interrupt
  * handler
  */
-static int32_t execTicks;
+static volatile int32_t execTicks = 0;
+static volatile int32_t rounds = 0;
 
 /**
  * Main PWM timer interrupt. Run the main motor control loop while measuring how
@@ -129,8 +135,8 @@ __interrupt void pwm_timer_isr(void)
     PwmGeneration::Run();
 
     // Measure the time - handles timer overflows
-    uint32_t totalTime = startTime - PerformanceCounter::GetCount();
-    execTicks = execTicks + totalTime;
+    execTicks += (startTime - PerformanceCounter::GetCount());
+    rounds++;
 
     if (IsTeslaM3Inverter())
     {
@@ -200,7 +206,7 @@ static void initEPWM(uint32_t base, uint16_t pwmmax, uint16_t deadBandCount)
     //
     // Set Compare values
     //
-    EPWM_setCounterCompareValue(base, EPWM_COUNTER_COMPARE_A, 0);
+    EPWM_setCounterCompareValue(base, EPWM_COUNTER_COMPARE_A, pwmmax/4);
 
     //
     // Set up counter mode
@@ -421,7 +427,8 @@ uint16_t PwmDriver::TimerSetup(
     {
         EPWM_setInterruptSource(EPWM4_BASE, EPWM_INT_TBCTR_ZERO);
         EPWM_enableInterrupt(EPWM4_BASE);
-        EPWM_setInterruptEventCount(EPWM4_BASE, 15U);
+        //EPWM_setInterruptEventCount(EPWM4_BASE, 15U);
+        EPWM_setInterruptEventCount(EPWM4_BASE, 1U);
     }
     else
     {
@@ -429,6 +436,10 @@ uint16_t PwmDriver::TimerSetup(
         EPWM_enableInterrupt(EPWM1_BASE);
         EPWM_setInterruptEventCount(EPWM1_BASE, 15U);
     }
+
+    EncoderDriver::Init(pwmmax);
+
+    CurrentVoltageDriver::Init();
 
     //
     // Enable sync and clock to PWM
@@ -491,6 +502,11 @@ void PwmDriver::SetChargeCurrent(int16_t dc)
 int32_t PwmDriver::GetCpuLoad()
 {
     return execTicks;
+}
+
+int32_t PwmDriver::GetRunRounds()
+{
+    return rounds;
 }
 
 /**

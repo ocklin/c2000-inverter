@@ -50,6 +50,7 @@ public:
     static void    AcHeat(s32fp ampnom);
     static void    SetChargeCurrent(int16_t dc);
     static int32_t GetCpuLoad();
+    static int32_t GetRunRounds();
     static void    ResetCpuLoad();
 
 private:

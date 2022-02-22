@@ -35,6 +35,19 @@ public:
     static void Enable();
     static void Disable();
 
+    static void GetErrorStatus(
+        uint16_t  regPos,
+        uint16_t* regNo,
+        uint16_t* status,
+        uint16_t  statusLen);
+    static void GetCrcStatus(
+        uint16_t  regNo,
+        uint16_t* status,
+        uint16_t  statusLen);
+
+    static const uint16_t NumStatusErrorRegister = 3;
+    static const uint16_t NumDriverChips = 6;
+
 private:
     enum ChipMask
     {
@@ -51,10 +64,16 @@ private:
     };
 
 private:
-    static const uint16_t NumDriverChips = 6;
     static const Register GateDriverRegisterSetup[];
     static const uint16_t RegisterSetupSize;
     static const Register NullGateDriverRegister;
+
+    // placing verify STATUSx register errors
+    static uint16_t LastErrorStatus[NumStatusErrorRegister][NumDriverChips];
+    // STATUSx crc failure encountered
+    static uint16_t LastErrorCrc[NumStatusErrorRegister][NumDriverChips];
+    // array with the available status registers and their register code
+    static uint16_t StatusRegisterNumbers[NumStatusErrorRegister];
 
 private:
     typedef uint16_t DataBuffer[NumDriverChips];
@@ -70,6 +89,8 @@ private:
         uint16_t regNum,
         uint16_t validBits,
         uint16_t value);
+
+    static void ResetLastErrors();
 
 private:
     static GateDriverInterface sm_interface;

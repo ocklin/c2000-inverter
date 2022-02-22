@@ -1,7 +1,10 @@
 add_library(inverter_drivers 
+    adcdriver.cpp
     eeprom.cpp 
     current.cpp 
+    currentvoltagedriver.cpp 
     encoder.cpp 
+    encoderdriver.cpp
     pmicspidriver.cpp 
     pwmdriver.cpp 
     gatedriver.cpp 

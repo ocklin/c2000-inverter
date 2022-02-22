@@ -64,6 +64,9 @@ public:
 
             EncoderT::UpdateRotorAngle(dir);
 
+            // 0 = 0, 360 = 2pi = 0xffff
+            BaseT::angle += 2; // about 0.5 rot per sec
+
             CalcNextAngleSync(dir);
             FOC::SetAngle(BaseT::angle);
 
@@ -109,6 +112,10 @@ public:
             int32_t qlimit = FOC::GetQLimit(ud);
             qController.SetMinMaxY(dir < 0 ? -qlimit : 0, dir > 0 ? qlimit : 0);
             int32_t uq = qController.Run(iq);
+
+            ud = 0.2 * 0xffff / 2;
+            uq = 0.5 * 0xffff / 2; 
+
             FOC::InvParkClarke(ud, uq);
 
             s32fp idc = (iq * uq + id * ud) / FOC::GetMaximumModulationIndex();
@@ -122,7 +129,8 @@ public:
             Param::SetInt(Param::uq, uq);
             Param::SetInt(Param::ud, ud);
 
-            /* Shut down PWM on stopped motor or init phase */
+            // Shut down PWM on stopped motor or init phase
+            /*
             if ((0 == BaseT::frq && 0 == idref && 0 == qController.GetRef()) ||
                 initwait > 0)
             {
@@ -136,6 +144,7 @@ public:
             {
                 PwmDriverT::EnableMasterOutput();
             }
+            */
 
             PwmDriverT::SetPhasePwm(
                 FOC::DutyCycles[0] >> BaseT::shiftForTimer,
@@ -220,8 +229,10 @@ private:
             initwait--;
         }
 
+        uint16_t phase1 = CurrentT::Phase1();
+
         s32fp il1 = BaseT::GetCurrent(
-            CurrentT::Phase1(), BaseT::ilofs[0], Param::Get(Param::il1gain));
+            phase1, BaseT::ilofs[0], Param::Get(Param::il1gain));
         s32fp il2 = BaseT::GetCurrent(
             CurrentT::Phase2(), BaseT::ilofs[1], Param::Get(Param::il2gain));
 
@@ -283,7 +294,7 @@ private:
         }
     }
 
-private:
+public:
     static int32_t     initwait;
     static int32_t     fwBaseGain;
     static s32fp       idref;

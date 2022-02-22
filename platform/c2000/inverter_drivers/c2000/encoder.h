@@ -47,6 +47,12 @@ public:
     static uint16_t GetRotorAngle();
     static u32fp    GetRotorFrequency();
     static int      GetRotorDirection();
+
+    static volatile int32_t measuredSin, measuredCos, exciterMonitor;    
+
+private:
+    static int32_t GetAngleSinCos(int dir);
+    static void UpdateTurns(uint16_t angle, uint16_t lastAngle);
 };
 
 } // namespace c2000

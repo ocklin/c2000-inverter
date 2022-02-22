@@ -1,7 +1,7 @@
 /*
- * This file is part of the stm32-sine project.
+ * This file is part of the Tesla M3 OSS Inverter project.
  *
- * Copyright (C) 2021 David J. Fiddes <D.J@fiddes.net>
+ * Copyright (C) 2022 Bernd Ocklin <bernd@ocklin.de>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,12 +17,30 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "c2000/currentvoltagedriver.h"
-#include "c2000/encoder.h"
-#include "c2000/pwmdriver.h"
-#include "focpwmgeneration.h"
+#include <stdint.h>
 
-// Global declaration of our PWM generation class - we only support Field
-// Oriented Control at this point
-typedef FocPwmGeneration<c2000::CurrentVoltageDriver, c2000::Encoder, c2000::PwmDriver>
-    PwmGeneration;
+#ifndef ENCODERDRIVER_H
+#define ENCODERDRIVER_H
+
+namespace c2000 {
+
+/*
+  Class taking care of C2000 specific API's for the position encoder:
+  
+     PWM for the exciter and ADC for measuring sin/cos
+*/
+class EncoderDriver {
+
+public:
+    static void Init(uint16_t pwmmax);
+    static void getSinCos(volatile int32_t &sin, volatile int32_t &cos, volatile int32_t &monitor);
+
+    static volatile uint32_t cycles;
+
+private:
+    static void InitAdc();
+};
+
+} // namespace c2000
+
+#endif //ENCODERDRIVER_H

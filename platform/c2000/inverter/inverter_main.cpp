@@ -24,6 +24,7 @@
 #include "pmicdriver.h"
 #include "c2000/current.h"
 #include "c2000/encoder.h"
+#include "c2000/encoderdriver.h"
 #include "c2000/gatedriver.h"
 #include "c2000/performancecounter.h"
 #include "c2000/pmicspidriver.h"
@@ -85,18 +86,27 @@ void main(void)
     // Set up the heartbeat LED
     //
     uint32_t heartbeatLedPin;
+    uint32_t heartbeatLedGreen;
+    uint32_t heartbeatLedRed;
 
     if (IsTeslaM3Inverter())
     {
-        heartbeatLedPin = DEVICE_TESLAM3_GPIO_PIN_LED1;
+        heartbeatLedGreen = DEVICE_TESLAM3_GPIO_PIN_LED1;
+        heartbeatLedRed = DEVICE_TESLAM3_GPIO_PIN_LED2;
     }
     else
     {
         heartbeatLedPin = DEVICE_LAUNCHXL_GPIO_PIN_LED1;
     }
-    GPIO_writePin(heartbeatLedPin, 1);
-    GPIO_setPadConfig(heartbeatLedPin, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(heartbeatLedPin, GPIO_DIR_MODE_OUT);
+    heartbeatLedPin = heartbeatLedGreen;
+
+    GPIO_writePin(heartbeatLedGreen, 1);
+    GPIO_setPadConfig(heartbeatLedGreen, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(heartbeatLedGreen, GPIO_DIR_MODE_OUT);
+
+    GPIO_writePin(heartbeatLedRed, 1);
+    GPIO_setPadConfig(heartbeatLedRed, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(heartbeatLedRed, GPIO_DIR_MODE_OUT);
 
     //
     // Turn on the gate drive PSU
@@ -193,15 +203,60 @@ void main(void)
     // Loop Forever
     //
     int32_t lastLoad = PwmGeneration::GetCpuLoad();
+    uint16_t  regPos;
+    uint16_t  regNo;
+    uint16_t  status[GateDriver::NumDriverChips];
+    uint16_t  statusLen = GateDriver::NumDriverChips;
+
+    //uint32_t lastCycles = 0;
+    
     while (true)
     {
         DEVICE_DELAY_US(500000);
 
-        printf("Gate Drive: %s\n", GateDriver::IsFaulty() ? "FAULT" : "OK");
+        bool isFaulty = GateDriver::IsFaulty();
+        
+
+        if(isFaulty)  
+        {
+            heartbeatLedPin = heartbeatLedRed;
+            printf("Gate Drive: FAULT\n");
+            for(regPos = 0; regPos < GateDriver::NumStatusErrorRegister; regPos++) {
+                uint16_t printit = 0;
+                GateDriver::GetErrorStatus(regPos, &regNo, status, statusLen);
+                for(uint16_t c = 0; c < GateDriver::NumDriverChips; c++) {
+                    printit += status[c];
+                }
+                if(printit > 0) 
+                {
+                    printf("    [%02x], %02x, %02x, %02x, %02x, %02x, %02x\n",
+                        regNo, status[0], status[1], status[2], status[3], status[4], status[5]);
+                }
+            }
+        }
+        else
+            heartbeatLedPin = heartbeatLedGreen;
+
 
         int32_t currentLoad = PwmGeneration::GetCpuLoad();
+        // int32_t rounds = PwmDriver::GetRunRounds();
         printf("PWM cycles: %ld\n", currentLoad - lastLoad);
         lastLoad = currentLoad;
+
+        /*
+        printf("%u, %ld, %ld, %ld - %ld\n", PwmGeneration::GetAngle(),
+            CurrentVoltageDriver::measureACurrent,
+            CurrentVoltageDriver::measureBCurrent,
+            CurrentVoltageDriver::measureDCV, 
+            CurrentVoltageDriver::cycles);
+        printf("%u, %u, %ld, %ld, %ld - %lu\n", PwmGeneration::GetAngle(),
+            Encoder::GetRotorAngle(),
+            Encoder::measuredSin, Encoder::measuredCos,
+            Encoder::exciterMonitor, 
+            EncoderDriver::cycles);
+        //lastCycles = CurrentVoltageDriver::cycles;
+        */
+
 
         GPIO_togglePin(heartbeatLedPin);
     }
