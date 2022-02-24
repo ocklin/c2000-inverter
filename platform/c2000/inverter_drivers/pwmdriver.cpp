@@ -196,6 +196,8 @@ void PwmDriver::SetOverCurrentLimits(int16_t limNeg, int16_t limPos)
  */
 static void initEPWM(uint32_t base, uint16_t pwmmax, uint16_t deadBandCount)
 {
+    EPWM_setEmulationMode(base, EPWM_EMULATION_FREE_RUN);
+
     //
     // Set-up TBCLK
     //
