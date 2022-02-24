@@ -25,6 +25,10 @@
 #include "picontroller.h"
 #include "pwmgenerationbase.h"
 
+#include <math.h>
+
+typedef  float float32_t;
+
 template <typename CurrentT, typename EncoderT, typename PwmDriverT>
 class FocPwmGeneration : public PwmGenerationBase<
                              FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>,
@@ -44,6 +48,24 @@ class FocPwmGeneration : public PwmGenerationBase<
         PwmDriverT>;
 
 public:
+
+    static const float32_t carrierMid = 2048;
+
+    // target Iq, Id send out and controlling PWM
+    static const float32_t  targetIq = 0.2f, targetId = 0.7f;
+
+    static const float32_t maxModIndex = 0.0f;
+
+    static float32_t theta;
+
+    #define PI 3.14159265358979
+
+    #define OnebySqrt3  1/sqrt(3)
+    #define Sqrt3  (float32_t)sqrt(3)
+
+    static const float32_t deltaTheta   = 2.0*PI/12000.0f;
+
+
     static void SetControllerGains(int32_t kp, int32_t ki, int32_t fwkp)
     {
         qController.SetGains(kp, ki);
@@ -53,6 +75,59 @@ public:
     }
 
     static void Run()
+    {
+        register float32_t parkSin, parkCos;
+
+        float32_t Ualpha, Ubeta;
+        float32_t Ta, Tb, Tc, minMaxOffset;
+        int32_t      dir = Param::GetInt(Param::dir);
+
+        static uint16_t firstround = 1;
+        static float32_t ramp = 1.0/12000.0; 
+
+        if(firstround) {
+            theta += deltaTheta*ramp;
+            ramp += 1.0/12000.0;
+        }
+        
+        if(theta >= 2.0f * PI) {
+          firstround = 0;
+          theta -= 2.0f * PI;
+        } 
+
+        EncoderT::UpdateRotorAngle(dir);        
+
+        parkSin = sinf(theta); // __sinpuf32(theta);
+        parkCos = cosf(theta); // __cospuf32(theta);
+
+        // Inv Park
+        Ualpha = targetId * parkCos - targetIq * parkSin;
+        Ubeta = targetId * parkSin + targetIq * parkCos;
+
+        // Inv Clark
+        Ubeta *= (float32_t)Sqrt3;
+
+        Ta = Ualpha;
+        Tb = (Ubeta - Ualpha) / 2.0f;
+        Tc = Tb - Ubeta;
+
+        // using min-max for 3rd harmonic
+        minMaxOffset = __fmax(__fmax(Ta, Tc), Tb);
+        minMaxOffset += __fmin(__fmin(Ta, Tc), Tb);
+        minMaxOffset /= 2.0f;
+
+        Ta -= minMaxOffset;
+        Tc -= minMaxOffset;
+        Tb -= minMaxOffset;
+
+        Ta = Ta * carrierMid + carrierMid;
+        Tb = Tb * carrierMid + carrierMid;
+        Tc = Tc * carrierMid + carrierMid;
+
+        PwmDriverT::SetPhasePwm((uint16_t)(uint32_t)Ta, (uint16_t)(uint32_t)Tb, (uint16_t)(uint32_t)Tc);
+    }
+
+    static void Run__()
     {
         if (BaseT::opmode == MANUAL || BaseT::opmode == RUN)
         {
@@ -67,7 +142,7 @@ public:
             // 0 = 0, 360 = 2pi = 0xffff
             BaseT::angle += 2; // about 0.5 rot per sec
 
-            CalcNextAngleSync(dir);
+            // CalcNextAngleSync(dir);
             FOC::SetAngle(BaseT::angle);
 
             BaseT::frqFiltered = IIRFILTER(BaseT::frqFiltered, BaseT::frq, 8);
@@ -114,7 +189,7 @@ public:
             int32_t uq = qController.Run(iq);
 
             ud = 0.2 * 0xffff / 2;
-            uq = 0.5 * 0xffff / 2; 
+            uq = 0.5 * 0xffff / 2;
 
             FOC::InvParkClarke(ud, uq);
 
@@ -131,8 +206,8 @@ public:
 
             // Shut down PWM on stopped motor or init phase
             /*
-            if ((0 == BaseT::frq && 0 == idref && 0 == qController.GetRef()) ||
-                initwait > 0)
+            if ((0 == BaseT::frq && 0 == idref && 0 == qController.GetRef())
+            || initwait > 0)
             {
                 PwmDriverT::DisableMasterOutput();
                 dController.ResetIntegrator();
@@ -320,6 +395,9 @@ template <typename CurrentT, typename EncoderT, typename PwmDriverT>
 int32_t FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::curki;
 
 template <typename CurrentT, typename EncoderT, typename PwmDriverT>
+float32_t FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::theta = 0;
+
+template <typename CurrentT, typename EncoderT, typename PwmDriverT>
 PiController FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::qController;
 
 template <typename CurrentT, typename EncoderT, typename PwmDriverT>
@@ -327,5 +405,6 @@ PiController FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::dController;
 
 template <typename CurrentT, typename EncoderT, typename PwmDriverT>
 PiController FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::fwController;
+
 
 #endif // FOCPWMGENERATION_H
