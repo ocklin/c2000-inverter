@@ -1,5 +1,6 @@
 add_library(inverter_drivers 
     adcdriver.cpp
+    breakswitchdriver.cpp
     eeprom.cpp 
     current.cpp 
     currentvoltagedriver.cpp 
