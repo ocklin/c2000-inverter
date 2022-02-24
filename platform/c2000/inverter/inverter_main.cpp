@@ -31,6 +31,7 @@
 #include "c2000/pwmdriver.h"
 #include "c2000/pwmgeneration.h"
 #include "c2000/scheduler.h"
+#include "c2000/breakswitchdriver.h"
 #include <stdio.h>
 
 // Pull in the whole C2000 namespace as this is platform specific code obviously
@@ -150,6 +151,8 @@ void main(void)
     // add a task to strobe the power watchdog every 100ms
     Scheduler::AddTask(taskStrobePowerWatchdog, 100);
 
+    BreakSwitchDriver::Init();
+
     // Set up the error message log and set operating parameters to default
     ErrorMessage::ResetAll();
     // TODO: Figure out where the timer tick comes from to increment this
@@ -208,6 +211,8 @@ void main(void)
     uint16_t  status[GateDriver::NumDriverChips];
     uint16_t  statusLen = GateDriver::NumDriverChips;
 
+    uint16_t no, nc;
+
     //uint32_t lastCycles = 0;
     
     while (true)
@@ -243,20 +248,19 @@ void main(void)
         printf("PWM cycles: %ld\n", currentLoad - lastLoad);
         lastLoad = currentLoad;
 
-        /*
-        printf("%u, %ld, %ld, %ld - %ld\n", PwmGeneration::GetAngle(),
+        printf("%u, %ld, %ld, %ld\n", PwmGeneration::GetAngle(),
             CurrentVoltageDriver::measureACurrent,
             CurrentVoltageDriver::measureBCurrent,
-            CurrentVoltageDriver::measureDCV, 
-            CurrentVoltageDriver::cycles);
-        printf("%u, %u, %ld, %ld, %ld - %lu\n", PwmGeneration::GetAngle(),
+            CurrentVoltageDriver::measureDCV);
+            
+        printf("%u, %u, %ld, %ld, %ld\n", PwmGeneration::GetAngle(),
             Encoder::GetRotorAngle(),
             Encoder::measuredSin, Encoder::measuredCos,
-            Encoder::exciterMonitor, 
-            EncoderDriver::cycles);
+            Encoder::exciterMonitor);
         //lastCycles = CurrentVoltageDriver::cycles;
-        */
 
+        BreakSwitchDriver::ReadValues(no, nc);
+        printf("breaks: %u, %u\n", no, nc);
 
         GPIO_togglePin(heartbeatLedPin);
     }
