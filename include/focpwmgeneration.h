@@ -29,6 +29,9 @@
 
 typedef  float float32_t;
 
+static uint16_t Tas[255];
+static uint16_t TasCnt = 0;
+
 template <typename CurrentT, typename EncoderT, typename PwmDriverT>
 class FocPwmGeneration : public PwmGenerationBase<
                              FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>,
@@ -82,20 +85,20 @@ public:
         float32_t Ta, Tb, Tc, minMaxOffset;
         int32_t      dir = Param::GetInt(Param::dir);
 
-        static uint16_t firstround = 1;
-        static float32_t ramp = 1.0/12000.0; 
 
-        if(firstround) {
-            theta += deltaTheta*ramp;
-            ramp += 1.0/12000.0;
-        }
+        EncoderT::UpdateRotorAngle(dir);
+
+        // CalcNextAngleSync(dir);
+        uint16_t rotorAngle = EncoderT::GetRotorAngle();
+        BaseT::angle = rotorAngle;
         
+        FOC::SetAngle(BaseT::angle);
+
+        theta = ((float)rotorAngle/65536.0f) + deltaTheta;
+
         if(theta >= 2.0f * PI) {
-          firstround = 0;
           theta -= 2.0f * PI;
         } 
-
-        EncoderT::UpdateRotorAngle(dir);        
 
         parkSin = sinf(theta); // __sinpuf32(theta);
         parkCos = cosf(theta); // __cospuf32(theta);
@@ -125,9 +128,10 @@ public:
         Tc = Tc * carrierMid + carrierMid;
 
         PwmDriverT::SetPhasePwm((uint16_t)(uint32_t)Ta, (uint16_t)(uint32_t)Tb, (uint16_t)(uint32_t)Tc);
+        Tas[TasCnt & 0xFF] = (uint16_t)(uint32_t)Ta; TasCnt++;
     }
 
-    static void Run__()
+    static void RunInt()
     {
         if (BaseT::opmode == MANUAL || BaseT::opmode == RUN)
         {
@@ -140,9 +144,9 @@ public:
             EncoderT::UpdateRotorAngle(dir);
 
             // 0 = 0, 360 = 2pi = 0xffff
-            BaseT::angle += 2; // about 0.5 rot per sec
+            //BaseT::angle += 2; // about 0.5 rot per sec
 
-            // CalcNextAngleSync(dir);
+            CalcNextAngleSync(dir);
             FOC::SetAngle(BaseT::angle);
 
             BaseT::frqFiltered = IIRFILTER(BaseT::frqFiltered, BaseT::frq, 8);
@@ -205,7 +209,6 @@ public:
             Param::SetInt(Param::ud, ud);
 
             // Shut down PWM on stopped motor or init phase
-            /*
             if ((0 == BaseT::frq && 0 == idref && 0 == qController.GetRef())
             || initwait > 0)
             {
@@ -219,7 +222,6 @@ public:
             {
                 PwmDriverT::EnableMasterOutput();
             }
-            */
 
             PwmDriverT::SetPhasePwm(
                 FOC::DutyCycles[0] >> BaseT::shiftForTimer,

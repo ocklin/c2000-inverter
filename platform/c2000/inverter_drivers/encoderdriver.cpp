@@ -38,9 +38,10 @@ const AdcInputT EncoderDriverExciterMonitor = {
     ADCD_BASE, ADCDRESULT_BASE, ADC_CH_ADCIN4
 };
 
-const ADC_IntNumber EncoderDriverAdcIntNumber = ADC_INT_NUMBER2;
+const ADC_IntNumber EncoderDriverAdcIntNumber = ADC_INT_NUMBER1;
 
 volatile uint32_t EncoderDriver::cycles = 0;
+volatile uint32_t EncoderDriver::totalCycles = 0;
 
 void EncoderDriver::Init(uint16_t pwmmax) 
 {
@@ -49,6 +50,8 @@ void EncoderDriver::Init(uint16_t pwmmax)
 
     //EPWM1 -> myEPWM1 Pinmux
     GPIO_setPinConfig(GPIO_0_EPWM1A);
+
+    EPWM_setEmulationMode(base, EPWM_EMULATION_FREE_RUN);
 
     //
     // Set-up TBCLK
@@ -73,7 +76,7 @@ void EncoderDriver::Init(uint16_t pwmmax)
     // Load shadow compare in the center (zero)
     //
     EPWM_setCounterCompareShadowLoadMode(
-        base, EPWM_COUNTER_COMPARE_A, EPWM_COMP_LOAD_ON_CNTR_ZERO);
+        base, EPWM_COUNTER_COMPARE_A, EPWM_COMP_LOAD_ON_SYNC_CNTR_ZERO);
 
     EPWM_setActionQualifierAction(base,
                                   EPWM_AQ_OUTPUT_A,
@@ -83,25 +86,11 @@ void EncoderDriver::Init(uint16_t pwmmax)
                                   EPWM_AQ_OUTPUT_A,
                                   EPWM_AQ_OUTPUT_LOW,
                                   EPWM_AQ_OUTPUT_ON_TIMEBASE_DOWN_CMPA);
-
-
-    // configure as dependent on 4
-    //
-    // ePWM1 uses the ePWM 4 SYNCO as its SYNCIN.
-    //
-    /*    
-    EPWM_setSyncOutPulseMode(base, EPWM_SYNC_OUT_PULSE_ON_EPWMxSYNCIN);
-    EPWM_enablePhaseShiftLoad(base);
-    // EPWM_setPhaseShift(base, 2);
-    EPWM_setCountModeAfterSync(base, EPWM_COUNT_MODE_UP_AFTER_SYNC);
-    */
-
-   InitAdc();
 }
 
 void EncoderDriver::InitAdc() {
 
-    const ADC_SOCNumber soc = ADC_SOC_NUMBER1;
+    const ADC_SOCNumber soc = ADC_SOC_NUMBER0;
 
     AdcDriver::Init(EncoderDriverResolverSinus.base);
     AdcDriver::Init(EncoderDriverResolverCosinus.base);
@@ -113,20 +102,23 @@ void EncoderDriver::InitAdc() {
     AdcDriver::Setup(EncoderDriverResolverSinus.base, EncoderDriverResolverSinus.channel, soc, 14);
     AdcDriver::Setup(EncoderDriverResolverCosinus.base, EncoderDriverResolverCosinus.channel, soc, 14);
     AdcDriver::Setup(EncoderDriverExciterMonitor.base, EncoderDriverExciterMonitor.channel, soc, 14);
+}
 
+void EncoderDriver::InitInterrupts() 
+{
     // Select SOC from counter, setting some irq base as for motor control loop
     // TODO - there must be a more elegant way, at least via a common define
 
     // TODO - this requires more investigation,
     //        xxx_PERIOD causes EOC wait loop in engine irq to spend far too much time
-    EPWM_setADCTriggerSource(EPWM4_BASE, EPWM_SOC_A, EPWM_SOC_TBCTR_ZERO);
+    EPWM_setADCTriggerSource(EPWM4_BASE, EPWM_SOC_A, EPWM_SOC_TBCTR_PERIOD);
     // Generate pulse on 1st event
     EPWM_setADCTriggerEventPrescale(EPWM4_BASE, EPWM_SOC_A, 1);
     // Enable SOC on A group
     EPWM_enableADCTrigger(EPWM4_BASE, EPWM_SOC_A);
 
     // Enable AdcA-ADCINT1- to help verify EoC before result data read
-    ADC_setInterruptSource(EncoderDriverResolverSinus.base, EncoderDriverAdcIntNumber, soc);
+    ADC_setInterruptSource(EncoderDriverResolverSinus.base, EncoderDriverAdcIntNumber, ADC_SOC_NUMBER0);
     ADC_enableContinuousMode(EncoderDriverResolverSinus.base, EncoderDriverAdcIntNumber);
     ADC_enableInterrupt(EncoderDriverResolverSinus.base, EncoderDriverAdcIntNumber);
 }
@@ -139,6 +131,8 @@ void EncoderDriver::getSinCos(volatile int32_t &sin, volatile int32_t &cos, vola
     // wait on ADC EOC
     while(ADC_getInterruptStatus(EncoderDriverResolverSinus.base, EncoderDriverAdcIntNumber) == 0) cycles++;
     NOP;    //1 cycle delay for ADC PPB result
+
+    totalCycles++;
 
     sin = ADC_readPPBResult(EncoderDriverResolverSinus.resultBase, ADC_PPB_NUMBER1);
     cos = ADC_readPPBResult(EncoderDriverResolverCosinus.resultBase, ADC_PPB_NUMBER1);

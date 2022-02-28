@@ -19,14 +19,14 @@
  */
 
 #include "c2000/pwmdriver.h"
-#include "c2000/pwmgeneration.h"
 #include "device.h"
 #include "driverlib.h"
 #include "errormessage.h"
 #include "params.h"
-#include "c2000/performancecounter.h"
 #include "c2000/currentvoltagedriver.h"
 #include "c2000/encoderdriver.h"
+#include "c2000/performancecounter.h"
+#include "c2000/pwmgeneration.h"
 
 namespace c2000 {
 
@@ -38,6 +38,8 @@ uint32_t PwmDriver::sm_phaseBEpwmBase;
 
 /** Phase B EPWM Base Address */
 uint32_t PwmDriver::sm_phaseCEpwmBase;
+
+uint16_t PwmDriver::pwmmax;
 
 /**
  * Driver Initialisation
@@ -109,7 +111,7 @@ void PwmDriver::SetPhasePwm(uint32_t phaseA, uint32_t phaseB, uint32_t phaseC)
     // when the counter reaches zero
     // uint32_t registerOffset = EPWM_O_CMPA + (uint16_t)EPWM_COUNTER_COMPARE_A;
     // HWREGH(sm_phaseAEpwmBase + registerOffset + 0x1U) = phaseA;
-    
+
     EPWM_setCounterCompareValue(
         sm_phaseAEpwmBase, EPWM_COUNTER_COMPARE_A, phaseA);
     EPWM_setCounterCompareValue(
@@ -138,25 +140,10 @@ __interrupt void pwm_timer_isr(void)
     execTicks += (startTime - PerformanceCounter::GetCount());
     rounds++;
 
-    if (IsTeslaM3Inverter())
-    {
-        //
-        // Clear INT flag for this timer
-        //
-        EPWM_clearEventTriggerInterruptFlag(EPWM4_BASE);
-    }
-    else
-    {
-        //
-        // Clear INT flag for this timer
-        //
-        EPWM_clearEventTriggerInterruptFlag(EPWM1_BASE);
-    }
+    EPWM_clearEventTriggerInterruptFlag(EPWM5_BASE);
 
-    //
     // Acknowledge interrupt group (same for both Tesla M3 inverter and
     // LAUNCHXL-F28379D)
-    //
     Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP3);
 }
 
@@ -196,19 +183,24 @@ void PwmDriver::SetOverCurrentLimits(int16_t limNeg, int16_t limPos)
  */
 static void initEPWM(uint32_t base, uint16_t pwmmax, uint16_t deadBandCount)
 {
+    uint16_t phaseShift = (4096U - 3280U);
+
     EPWM_setEmulationMode(base, EPWM_EMULATION_FREE_RUN);
 
     //
     // Set-up TBCLK
     //
     EPWM_setTimeBasePeriod(base, pwmmax);
-    EPWM_setPhaseShift(base, 0U);
+    EPWM_setPhaseShift(base, phaseShift);
     EPWM_setTimeBaseCounter(base, 0U);
+    EPWM_setCountModeAfterSync(base, EPWM_COUNT_MODE_UP_AFTER_SYNC);
 
     //
     // Set Compare values
     //
-    EPWM_setCounterCompareValue(base, EPWM_COUNTER_COMPARE_A, pwmmax/4);
+    EPWM_setCounterCompareValue(base, EPWM_COUNTER_COMPARE_A, 0);
+
+    EPWM_selectPeriodLoadEvent(base, EPWM_SHADOW_LOAD_MODE_SYNC);
 
     //
     // Set up counter mode
@@ -218,14 +210,7 @@ static void initEPWM(uint32_t base, uint16_t pwmmax, uint16_t deadBandCount)
     EPWM_setClockPrescaler(base, EPWM_CLOCK_DIVIDER_1, EPWM_HSCLOCK_DIVIDER_1);
 
     //
-    // Load shadow compare in the center (zero)
-    //
-    EPWM_setCounterCompareShadowLoadMode(
-        base, EPWM_COUNTER_COMPARE_A, EPWM_COMP_LOAD_ON_CNTR_ZERO);
-
-    //
-    // Load shadow action qualifier force at the end of the period to get a
-    // clean on-off transition
+    // Load shadow compare in the centre (zero)
     //
     EPWM_setActionQualifierContSWForceShadowMode(
         base, EPWM_AQ_SW_SH_LOAD_ON_CNTR_PERIOD);
@@ -303,168 +288,124 @@ uint16_t PwmDriver::TimerSetup(
     const uint32_t EPWM_FREQ = DEVICE_SYSCLK_FREQ / 2;
 
     // Determine the maximum counter value for PWM
-    const uint16_t pwmmax = 1U << pwmdigits;
+    pwmmax = 1U << pwmdigits;
 
     // Determine the count for the required deadtime
     const uint16_t nsPerCount = 1e9 / EPWM_FREQ;
     const uint16_t deadBandCount = deadtime / nsPerCount;
 
+    //
+    // Set up GPIO pinmux for EPWM
+    //
+    GPIO_setPinConfig(GPIO_8_EPWM5A);
+    GPIO_setPinConfig(GPIO_9_EPWM5B);
+    GPIO_setPinConfig(GPIO_10_EPWM6A);
+    GPIO_setPinConfig(GPIO_11_EPWM6B);
+
+    if (IsTeslaM3Inverter())
+    {
+        GPIO_setPinConfig(GPIO_12_EPWM7A);
+        GPIO_setPinConfig(GPIO_13_EPWM7B);
+    }
+    else
+    {
+        // for launchpad we also set up 4 as output
+        GPIO_setPinConfig(GPIO_6_EPWM4A);
+        GPIO_setPinConfig(GPIO_7_EPWM4B);
+    }
+
     // Disable sync(Freeze clock to PWM as well).
     SysCtl_disablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
 
+    EncoderDriver::Init(pwmmax);
+
+    // Enable PWM 1 as the primary sync source
+    EPWM_setSyncOutPulseMode(EPWM1_BASE, EPWM_SYNC_OUT_PULSE_ON_COUNTER_ZERO);
+
+    // pwm4 is used to passover pwm1 sync out to pwm 5 and 6
+    SysCtl_setSyncInputConfig(
+        SYSCTL_SYNC_IN_EPWM4, SYSCTL_SYNC_IN_SRC_EPWM1SYNCOUT);
+    EPWM_setSyncOutPulseMode(EPWM4_BASE, EPWM_SYNC_OUT_PULSE_ON_EPWMxSYNCIN);
+
+    // Store the EPWM modules used for each phase for normal operation
+    sm_phaseAEpwmBase = EPWM5_BASE;
+    sm_phaseCEpwmBase = EPWM6_BASE;
+
     if (IsTeslaM3Inverter())
     {
-        // Store the EPWM modules used for each phase for normal operation
-        sm_phaseAEpwmBase = EPWM5_BASE;
         sm_phaseBEpwmBase = EPWM7_BASE;
-        sm_phaseCEpwmBase = EPWM6_BASE;
-
-        //
-        // Initialize EPWM4 as master (only used for clock synchronisation
-        // currently)
-        //
-        initEPWM(EPWM4_BASE, pwmmax, deadBandCount);
-
-        //
-        // Initialize EPWM5 and sync to EPWM4
-        //
-        initEPWM(EPWM5_BASE, pwmmax, deadBandCount);
-        EPWM_selectPeriodLoadEvent(EPWM5_BASE, EPWM_SHADOW_LOAD_MODE_SYNC);
-
-        //
-        // Initialize EPWM6 and sync to EPWM4
-        //
-        initEPWM(EPWM6_BASE, pwmmax, deadBandCount);
-        EPWM_selectPeriodLoadEvent(EPWM6_BASE, EPWM_SHADOW_LOAD_MODE_SYNC);
-
-        //
-        // Initialize EPWM7 and sync to EPWM4
-        //
-        initEPWM(EPWM7_BASE, pwmmax, deadBandCount);
-        EPWM_selectPeriodLoadEvent(EPWM7_BASE, EPWM_SHADOW_LOAD_MODE_SYNC);
-
-        //
-        // EPWM4 SYNCO is generated on CTR=0
-        //
-        EPWM_setSyncOutPulseMode(
-            EPWM4_BASE, EPWM_SYNC_OUT_PULSE_ON_COUNTER_ZERO);
-
-        //
-        // EPWM5 uses the EPWM 4 SYNCO as its SYNCIN.
-        // EPWM5 SYNCO is generated from its SYNCIN
-        //
-        EPWM_setSyncOutPulseMode(
-            EPWM5_BASE, EPWM_SYNC_OUT_PULSE_ON_EPWMxSYNCIN);
-
-        //
-        // EPWM6 uses the EPWM 5 SYNCO as its SYNCIN.
-        // EPWM6 SYNCO is generated from its SYNCIN
-        //
-        EPWM_setSyncOutPulseMode(
-            EPWM6_BASE, EPWM_SYNC_OUT_PULSE_ON_EPWMxSYNCIN);
-
-        //
-        // EPWM7 uses EPWM4 SYNCO as its SYNCIN
-        //
-        SysCtl_setSyncInputConfig(
-            SYSCTL_SYNC_IN_EPWM7, SYSCTL_SYNC_IN_SRC_EPWM4SYNCOUT);
-
-        //
-        // Enable all phase shifts.
-        //
-        EPWM_enablePhaseShiftLoad(EPWM5_BASE);
-        EPWM_enablePhaseShiftLoad(EPWM6_BASE);
-        EPWM_enablePhaseShiftLoad(EPWM7_BASE);
     }
     else
     {
-        // Store the EPWM modules used for each phase for normal operation
-        sm_phaseAEpwmBase = EPWM1_BASE;
-        sm_phaseBEpwmBase = EPWM2_BASE;
-        sm_phaseCEpwmBase = EPWM3_BASE;
-
-        //
-        // Initialize EPWM1 as master
-        //
-        initEPWM(EPWM1_BASE, pwmmax, deadBandCount);
-
-        //
-        // Initialize EPWM2 and sync to EPWM1
-        //
-        initEPWM(EPWM2_BASE, pwmmax, deadBandCount);
-        EPWM_selectPeriodLoadEvent(EPWM2_BASE, EPWM_SHADOW_LOAD_MODE_SYNC);
-
-        //
-        // Initialize EPWM3 and sync to EPWM1
-        //
-        initEPWM(EPWM3_BASE, pwmmax, deadBandCount);
-        EPWM_selectPeriodLoadEvent(EPWM3_BASE, EPWM_SHADOW_LOAD_MODE_SYNC);
-
-        //
-        // EPWM1 SYNCO is generated on CTR=0
-        //
-        EPWM_setSyncOutPulseMode(
-            EPWM1_BASE, EPWM_SYNC_OUT_PULSE_ON_COUNTER_ZERO);
-
-        //
-        // EPWM2 uses the EPWM1 SYNCO as its SYNCIN.
-        // EPWM2 SYNCO is generated from its SYNCIN
-        //
-        EPWM_setSyncOutPulseMode(
-            EPWM2_BASE, EPWM_SYNC_OUT_PULSE_ON_EPWMxSYNCIN);
-
-        //
-        // Enable all phase shifts.
-        //
-        EPWM_enablePhaseShiftLoad(EPWM2_BASE);
-        EPWM_enablePhaseShiftLoad(EPWM3_BASE);
+        sm_phaseBEpwmBase = EPWM4_BASE;
     }
 
     //
+    // Initialize EPWM for all phases
+    //
+    initEPWM(sm_phaseAEpwmBase, pwmmax, deadBandCount);
+    initEPWM(sm_phaseBEpwmBase, pwmmax, deadBandCount);
+    initEPWM(sm_phaseCEpwmBase, pwmmax, deadBandCount);
+
+    // EPWM5 uses EPWM 4 SYNCO as its SYNCIN.
+    EPWM_setSyncOutPulseMode(EPWM5_BASE, EPWM_SYNC_OUT_PULSE_ON_EPWMxSYNCIN);
+    EPWM_enablePhaseShiftLoad(EPWM5_BASE);
+
+    // EPWM6 uses EPWM 5 SYNCO as its SYNCIN.
+    EPWM_setSyncOutPulseMode(EPWM6_BASE, EPWM_SYNC_OUT_PULSE_ON_EPWMxSYNCIN);
+    EPWM_enablePhaseShiftLoad(EPWM6_BASE);
+
+    if (IsTeslaM3Inverter())
+    {
+        // EPWM7 uses EPWM4 SYNCO as its SYNCIN
+        // to hand over into next tripple
+        SysCtl_setSyncInputConfig(
+            SYSCTL_SYNC_IN_EPWM7, SYSCTL_SYNC_IN_SRC_EPWM4SYNCOUT);
+        EPWM_enablePhaseShiftLoad(EPWM7_BASE);
+    }
+
+    // enabling phase shift load no matter if output is generated 
+    //    or if 4 is just for sync forward
+    EPWM_enablePhaseShiftLoad(EPWM4_BASE);
+
+    EncoderDriver::InitAdc();
+
+    uint32_t triggerBase = EPWM5_BASE;
+
+    EPWM_setADCTriggerSource(triggerBase, EPWM_SOC_A, EPWM_SOC_TBCTR_PERIOD);
+    EPWM_setADCTriggerEventPrescale(triggerBase, EPWM_SOC_A, 1);
+    EPWM_enableADCTrigger(triggerBase, EPWM_SOC_A);
+
     // Interrupt where we will change the Compare Values
     // Select INT on Time base counter zero event,
     // Enable INT, generate INT on 15th event (to allow non-optimised code)
-    //
-    if (IsTeslaM3Inverter())
-    {
-        EPWM_setInterruptSource(EPWM4_BASE, EPWM_INT_TBCTR_ZERO);
-        EPWM_enableInterrupt(EPWM4_BASE);
-        //EPWM_setInterruptEventCount(EPWM4_BASE, 15U);
-        EPWM_setInterruptEventCount(EPWM4_BASE, 1U);
-    }
-    else
-    {
-        EPWM_setInterruptSource(EPWM1_BASE, EPWM_INT_TBCTR_ZERO);
-        EPWM_enableInterrupt(EPWM1_BASE);
-        EPWM_setInterruptEventCount(EPWM1_BASE, 15U);
-    }
+    
+    EPWM_setInterruptSource(triggerBase, EPWM_INT_TBCTR_PERIOD);
+    EPWM_setInterruptEventCount(triggerBase, 10U);
+    EPWM_enableInterrupt(triggerBase);
+    EPWM_clearEventTriggerInterruptFlag(triggerBase);
 
-    EncoderDriver::Init(pwmmax);
+    Interrupt_register(INT_EPWM5, &pwm_timer_isr);
 
-    CurrentVoltageDriver::Init();
+    // Enable AdcA-ADCINT1- to help verify EoC before result data read
+    ADC_setInterruptSource(ADCA_BASE, ADC_INT_NUMBER1, ADC_SOC_NUMBER0);
+    ADC_enableContinuousMode(ADCA_BASE, ADC_INT_NUMBER1);
+    ADC_enableInterrupt(ADCA_BASE, ADC_INT_NUMBER1);
 
-    //
-    // Enable sync and clock to PWM
-    //
-    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
+    // EncoderDriver::InitInterrupts();
+
+    //CurrentVoltageDriver::Init();
 
     // Ensure we have initialised the performance counter before we start
     // getting interrupts
     PerformanceCounter::Init();
 
+    Interrupt_enable(INT_EPWM5);
+
     //
-    // Enable EPWM interrupts
+    // Enable sync and clock to PWM
     //
-    if (IsTeslaM3Inverter())
-    {
-        Interrupt_register(INT_EPWM4, &pwm_timer_isr);
-        Interrupt_enable(INT_EPWM4);
-    }
-    else
-    {
-        Interrupt_register(INT_EPWM1, &pwm_timer_isr);
-        Interrupt_enable(INT_EPWM1);
-    }
+    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
 
     // Return the pwm frequency. Because we use the up-down count mode divide by
     // 2 * the period

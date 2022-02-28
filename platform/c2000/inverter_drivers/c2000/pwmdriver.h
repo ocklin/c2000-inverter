@@ -53,6 +53,8 @@ public:
     static int32_t GetRunRounds();
     static void    ResetCpuLoad();
 
+    static uint16_t pwmmax;
+
 private:
     static uint32_t sm_phaseAEpwmBase;
     static uint32_t sm_phaseBEpwmBase;

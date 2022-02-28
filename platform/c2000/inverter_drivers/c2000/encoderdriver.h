@@ -33,12 +33,13 @@ class EncoderDriver {
 
 public:
     static void Init(uint16_t pwmmax);
+    static void InitAdc();
+    static void InitInterrupts();
     static void getSinCos(volatile int32_t &sin, volatile int32_t &cos, volatile int32_t &monitor);
 
     static volatile uint32_t cycles;
-
+    static volatile uint32_t totalCycles;
 private:
-    static void InitAdc();
 };
 
 } // namespace c2000

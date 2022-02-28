@@ -22,6 +22,7 @@
 #include "errormessage.h"
 #include "focpwmgeneration.h"
 #include "pmicdriver.h"
+#include "c2000/breakswitchdriver.h"
 #include "c2000/current.h"
 #include "c2000/encoder.h"
 #include "c2000/encoderdriver.h"
@@ -31,7 +32,6 @@
 #include "c2000/pwmdriver.h"
 #include "c2000/pwmgeneration.h"
 #include "c2000/scheduler.h"
-#include "c2000/breakswitchdriver.h"
 #include <stdio.h>
 
 // Pull in the whole C2000 namespace as this is platform specific code obviously
@@ -60,28 +60,6 @@ void main(void)
     // Initialize GPIO and configure the GPIO pin as a push-pull output
     //
     Device_initGPIO();
-
-    //
-    // Set up GPIO pinmux for EPWM
-    //
-    if (IsTeslaM3Inverter())
-    {
-        GPIO_setPinConfig(GPIO_8_EPWM5A);
-        GPIO_setPinConfig(GPIO_9_EPWM5B);
-        GPIO_setPinConfig(GPIO_10_EPWM6A);
-        GPIO_setPinConfig(GPIO_11_EPWM6B);
-        GPIO_setPinConfig(GPIO_12_EPWM7A);
-        GPIO_setPinConfig(GPIO_13_EPWM7B);
-    }
-    else
-    {
-        GPIO_setPinConfig(GPIO_0_EPWM1A);
-        GPIO_setPinConfig(GPIO_1_EPWM1B);
-        GPIO_setPinConfig(GPIO_2_EPWM2A);
-        GPIO_setPinConfig(GPIO_3_EPWM2B);
-        GPIO_setPinConfig(GPIO_4_EPWM3A);
-        GPIO_setPinConfig(GPIO_5_EPWM3B);
-    }
 
     //
     // Set up the heartbeat LED
@@ -205,59 +183,76 @@ void main(void)
     //
     // Loop Forever
     //
-    int32_t lastLoad = PwmGeneration::GetCpuLoad();
-    uint16_t  regPos;
-    uint16_t  regNo;
-    uint16_t  status[GateDriver::NumDriverChips];
-    uint16_t  statusLen = GateDriver::NumDriverChips;
+    int32_t  lastLoad = PwmGeneration::GetCpuLoad();
+    uint16_t regPos;
+    uint16_t regNo;
+    uint16_t status[GateDriver::NumDriverChips];
+    uint16_t statusLen = GateDriver::NumDriverChips;
 
     uint16_t no, nc;
 
-    //uint32_t lastCycles = 0;
-    
+    // uint32_t lastCycles = 0;
+    printf("PWM period: %u\n", PwmDriver::pwmmax);
+
     while (true)
     {
         DEVICE_DELAY_US(500000);
 
         bool isFaulty = GateDriver::IsFaulty();
-        
 
-        if(isFaulty)  
+        if (isFaulty)
         {
             heartbeatLedPin = heartbeatLedRed;
             printf("Gate Drive: FAULT\n");
-            for(regPos = 0; regPos < GateDriver::NumStatusErrorRegister; regPos++) {
+            for (regPos = 0; regPos < GateDriver::NumStatusErrorRegister;
+                 regPos++)
+            {
                 uint16_t printit = 0;
                 GateDriver::GetErrorStatus(regPos, &regNo, status, statusLen);
-                for(uint16_t c = 0; c < GateDriver::NumDriverChips; c++) {
+                for (uint16_t c = 0; c < GateDriver::NumDriverChips; c++)
+                {
                     printit += status[c];
                 }
-                if(printit > 0) 
+                if (printit > 0)
                 {
-                    printf("    [%02x], %02x, %02x, %02x, %02x, %02x, %02x\n",
-                        regNo, status[0], status[1], status[2], status[3], status[4], status[5]);
+                    printf(
+                        "    [%02x], %02x, %02x, %02x, %02x, %02x, %02x\n",
+                        regNo,
+                        status[0],
+                        status[1],
+                        status[2],
+                        status[3],
+                        status[4],
+                        status[5]);
                 }
             }
         }
         else
             heartbeatLedPin = heartbeatLedGreen;
 
-
         int32_t currentLoad = PwmGeneration::GetCpuLoad();
         // int32_t rounds = PwmDriver::GetRunRounds();
         printf("PWM cycles: %ld\n", currentLoad - lastLoad);
         lastLoad = currentLoad;
 
-        printf("%u, %ld, %ld, %ld\n", PwmGeneration::GetAngle(),
+        printf(
+            "%u, %ld, %ld, %ld\n",
+            PwmGeneration::GetAngle(),
             CurrentVoltageDriver::measureACurrent,
             CurrentVoltageDriver::measureBCurrent,
             CurrentVoltageDriver::measureDCV);
-            
-        printf("%u, %u, %ld, %ld, %ld\n", PwmGeneration::GetAngle(),
-            Encoder::GetRotorAngle(),
-            Encoder::measuredSin, Encoder::measuredCos,
-            Encoder::exciterMonitor);
-        //lastCycles = CurrentVoltageDriver::cycles;
+
+        uint16_t angle = Encoder::GetRotorAngle();
+        printf("%u, %u, %u, %ld, %ld, %ld, %lu, %lu\n",
+            PwmGeneration::GetAngle(),
+            angle,
+            (uint16_t)(360.0f * ((float)angle / 65536.0f / 2.0f / PI)),
+            Encoder::measuredSin,
+            Encoder::measuredCos,
+            Encoder::exciterMonitor,
+            EncoderDriver::totalCycles,
+            EncoderDriver::cycles);
+        // lastCycles = CurrentVoltageDriver::cycles;
 
         BreakSwitchDriver::ReadValues(no, nc);
         printf("breaks: %u, %u\n", no, nc);

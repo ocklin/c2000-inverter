@@ -44,12 +44,12 @@ void AdcDriver::Init(uint32_t base)
 
 void AdcDriver::Setup(uint32_t base, uint16_t channelNumber, ADC_SOCNumber soc, uint32_t sampleWindow)
 {
-    ADC_setupSOC(base, soc,
-                  ADC_TRIGGER_EPWM4_SOCA, (ADC_Channel)channelNumber, sampleWindow);
+    ADC_setupSOC(base, ADC_SOC_NUMBER0,
+                  ADC_TRIGGER_EPWM5_SOCA, (ADC_Channel)channelNumber, sampleWindow);
 
     // Configure PPB to eliminate subtraction related calculation
     // PPB is associated with SOC0
-    ADC_setupPPB(base, ADC_PPB_NUMBER1, soc);
+    ADC_setupPPB(base, ADC_PPB_NUMBER1, ADC_SOC_NUMBER0);
 
     // Write zero to this for now till offset ISR is run
     ADC_setPPBCalibrationOffset(base, ADC_PPB_NUMBER1, 0);
