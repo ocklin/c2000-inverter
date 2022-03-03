@@ -55,18 +55,17 @@ public:
     static const float32_t carrierMid = 2048;
 
     // target Iq, Id send out and controlling PWM
-    static const float32_t  targetIq = 0.2f, targetId = 0.7f;
+    static const float32_t  targetIq = 0.2, targetId = 0.7f;
 
     static const float32_t maxModIndex = 0.0f;
-
-    static float32_t theta;
+    static float32_t lastTheta;
 
     #define PI 3.14159265358979
 
     #define OnebySqrt3  1/sqrt(3)
     #define Sqrt3  (float32_t)sqrt(3)
 
-    static const float32_t deltaTheta   = 2.0*PI/12000.0f;
+    static const float32_t deltaTheta   = 2.0*PI/12207.0f; // 9 for fixed gear ratio 9:1
 
 
     static void SetControllerGains(int32_t kp, int32_t ki, int32_t fwkp)
@@ -79,26 +78,33 @@ public:
 
     static void Run()
     {
-        register float32_t parkSin, parkCos;
+        float32_t parkSin, parkCos;
 
         float32_t Ualpha, Ubeta;
         float32_t Ta, Tb, Tc, minMaxOffset;
         int32_t      dir = Param::GetInt(Param::dir);
-
+        static const float32_t BRAD_PI_2 = (1UL << 15)*2.0f;
+        static const float32_t PI_2 = PI*2.0f;
+        float32_t theta;
 
         EncoderT::UpdateRotorAngle(dir);
 
         // CalcNextAngleSync(dir);
         uint16_t rotorAngle = EncoderT::GetRotorAngle();
+        float32_t tpi2 = ((float32_t)rotorAngle/BRAD_PI_2)*PI_2;
+
         BaseT::angle = rotorAngle;
         
         FOC::SetAngle(BaseT::angle);
 
-        theta = ((float)rotorAngle/65536.0f) + deltaTheta;
+        //speed = abs(lastTheta - theta);
 
-        if(theta >= 2.0f * PI) {
-          theta -= 2.0f * PI;
-        } 
+        theta = tpi2 + deltaTheta;
+        if(theta >= PI_2) {
+            theta -= PI_2;
+        }
+
+        lastTheta = theta;
 
         parkSin = sinf(theta); // __sinpuf32(theta);
         parkCos = cosf(theta); // __cospuf32(theta);
@@ -397,7 +403,7 @@ template <typename CurrentT, typename EncoderT, typename PwmDriverT>
 int32_t FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::curki;
 
 template <typename CurrentT, typename EncoderT, typename PwmDriverT>
-float32_t FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::theta = 0;
+float32_t FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::lastTheta = 0;
 
 template <typename CurrentT, typename EncoderT, typename PwmDriverT>
 PiController FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::qController;
@@ -407,6 +413,7 @@ PiController FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::dController;
 
 template <typename CurrentT, typename EncoderT, typename PwmDriverT>
 PiController FocPwmGeneration<CurrentT, EncoderT, PwmDriverT>::fwController;
+
 
 
 #endif // FOCPWMGENERATION_H

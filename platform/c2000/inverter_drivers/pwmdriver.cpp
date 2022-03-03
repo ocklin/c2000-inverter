@@ -183,7 +183,8 @@ void PwmDriver::SetOverCurrentLimits(int16_t limNeg, int16_t limPos)
  */
 static void initEPWM(uint32_t base, uint16_t pwmmax, uint16_t deadBandCount)
 {
-    uint16_t phaseShift = (4096U - 3280U);
+    //uint16_t phaseShift = (4096U - 3280U);
+    uint16_t phaseShift = 0U;
 
     EPWM_setEmulationMode(base, EPWM_EMULATION_FREE_RUN);
 
@@ -381,7 +382,7 @@ uint16_t PwmDriver::TimerSetup(
     // Enable INT, generate INT on 15th event (to allow non-optimised code)
     
     EPWM_setInterruptSource(triggerBase, EPWM_INT_TBCTR_PERIOD);
-    EPWM_setInterruptEventCount(triggerBase, 10U);
+    EPWM_setInterruptEventCount(triggerBase, 1U);
     EPWM_enableInterrupt(triggerBase);
     EPWM_clearEventTriggerInterruptFlag(triggerBase);
 

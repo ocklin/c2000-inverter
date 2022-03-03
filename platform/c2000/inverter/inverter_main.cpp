@@ -243,15 +243,13 @@ void main(void)
             CurrentVoltageDriver::measureDCV);
 
         uint16_t angle = Encoder::GetRotorAngle();
-        printf("%u, %u, %u, %ld, %ld, %ld, %lu, %lu\n",
-            PwmGeneration::GetAngle(),
-            angle,
-            (uint16_t)(360.0f * ((float)angle / 65536.0f / 2.0f / PI)),
+        static const float brad_pi_2 = (float)(1U << 15) * 2.0f;
+
+        printf("%u, %ld, %ld, %lu\n",
+            (int16_t)(3600.0f * ((float)angle / brad_pi_2)),
             Encoder::measuredSin,
             Encoder::measuredCos,
-            Encoder::exciterMonitor,
-            EncoderDriver::totalCycles,
-            EncoderDriver::cycles);
+            EncoderDriver::totalCycles/EncoderDriver::cycles);
         // lastCycles = CurrentVoltageDriver::cycles;
 
         BreakSwitchDriver::ReadValues(no, nc);

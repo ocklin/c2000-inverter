@@ -53,6 +53,11 @@ void AdcDriver::Setup(uint32_t base, uint16_t channelNumber, ADC_SOCNumber soc, 
 
     // Write zero to this for now till offset ISR is run
     ADC_setPPBCalibrationOffset(base, ADC_PPB_NUMBER1, 0);
+
+    // offset is at 1.64V on a 0V to 3.3V range of 12bit
+    // TODO: run a calibration cycle
+    ADC_setPPBReferenceOffset(base, ADC_PPB_NUMBER1,
+                              (uint16_t)(1.64/3.3 * 4096.0));
 }
 
 } // c2000 namespace

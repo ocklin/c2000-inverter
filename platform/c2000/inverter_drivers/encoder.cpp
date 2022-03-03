@@ -28,10 +28,11 @@
 
 namespace c2000 {
 
-const uint16_t MIN_RES_AMP = 1000;
+//const uint16_t MIN_RES_AMP = 1000;
 #define TWO_PI 65536
 
-static int32_t           resolverMin = 0, resolverMax = 0, startupDelay;
+//static int32_t           resolverMin = 0, resolverMax = 0;
+static int32_t           startupDelay;
 static volatile uint16_t angle = 0;
 static int32_t           turnsSinceLastSample = 0;
 static uint32_t          fullTurns = 0;
@@ -75,13 +76,15 @@ int32_t Encoder::GetAngleSinCos(int dir)
     EncoderDriver::getSinCos(measuredSin, measuredCos, exciterMonitor);
 
     // Wait for signal to reach usable amplitude
-    if ((resolverMax - resolverMin) > MIN_RES_AMP)
+    //if ((resolverMax - resolverMin) > MIN_RES_AMP)
     {
         if (invert)
-            return SineCore::Atan2(-measuredSin, -measuredCos);
-        return SineCore::Atan2(measuredSin, measuredCos);
+            return SineCore::Atan2(-measuredCos, -measuredSin);
+        return SineCore::Atan2(measuredCos, measuredSin);
     }
-    else
+    /*
+     *
+     else
     {
         int temp = MIN(measuredSin, measuredCos);
         resolverMin = MIN(temp, resolverMin);
@@ -93,7 +96,7 @@ int32_t Encoder::GetAngleSinCos(int dir)
             // ErrorMessage::Post(ERR_LORESAMP);
         }
         return 0;
-    }
+    }*/
 }
 
 void Encoder::UpdateTurns(uint16_t angle, uint16_t lastAngle)
