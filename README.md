@@ -2,6 +2,17 @@
 
 [![Build status](../../actions/workflows/CI-build.yml/badge.svg)](../../actions/workflows/CI-build.yml)
 
+> **About this fork's `main` branch**
+>
+> This is a working base for bringing up the Tesla Model 3 **rear** drive unit (PMSM, resolver FOC). It is assembled from:
+>
+> * [techn0zahrt-ctrl/c2000-inverter-M3-Y](https://github.com/techn0zahrt-ctrl/c2000-inverter-M3-Y) `portable-cpp` at `d52a194` (2026-09-28), itself a fork of [davefiddes/c2000-inverter](https://github.com/davefiddes/c2000-inverter), and
+> * the two commits of the **unmerged** pull request [techn0zahrt-ctrl/c2000-inverter-M3-Y#1](https://github.com/techn0zahrt-ctrl/c2000-inverter-M3-Y/pull/1) (latched HVIL protection, by komeil-gh). It adds the `CONTROL=SINE|FOC` CMake option, without which the FOC build fails on Chris's branch.
+>
+> Original authorship is preserved in the git history. Build with `-DPLATFORM=c2000 -DCONTROL=FOC` for the rear unit.
+>
+> **Status:** host tests pass (SINE 35/35, FOC 44/44) and both C2000 RAM images build with TI C2000-CGT 25.11.1.LTS. Nothing from this branch has been run on rear-unit hardware yet. The HVIL change is not validated on hardware either (its 10-30 mA window is provisional). A code review found open issues, among them: `PwmDriver::SetOverCurrentLimits` is an unimplemented stub, the resolver loss-of-signal check latches its amplitude peak, and some `int` uses in the control ISR are 16-bit on the C28x.
+
 A port of the Huebner inverter project to the [TI C2000](https://www.ti.com/microcontrollers-mcus-processors/microcontrollers/c2000-real-time-control-mcus/overview.html) family of micro-controllers. Specifically this targets the TMS320F28377D MCU found in both the Tesla Model 3 / Y front and rear drive unit inverters, allowing a completely open source solution to running Tesla Model 3 / Y drive units in non-Tesla vehicles. For other Tesla drive units, inverters from other manufacturers and DIY inverters have a look at the [openinverter project](https://openinverter.org).
 
 **This software is not yet validated on hardware and is NOT suitable for use in vehicles at this time.**
