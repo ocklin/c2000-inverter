@@ -34,8 +34,8 @@ inline int16_t CorrectResolverSample(uint16_t raw, int32_t offset, int32_t gainP
 
 /** Find per-channel offsets and the cosine gain while the shaft is turned.
  * Tracks the min/max of both raw channels. Once at least MinSeconds of samples
- * are in and both spreads reach MinSpread, it finishes: DONE if the cosine gain
- * is within [50, 200] %, otherwise FAILED. FAILED too after TimeoutSeconds.
+ * are in and both spreads reach MinSpread, it finishes: Done if the cosine gain
+ * is within [50, 200] %, otherwise Failed. Failed too after TimeoutSeconds.
  */
 class ResolverCalibrator
 {
@@ -43,10 +43,10 @@ public:
     //! Values match the rescalstat parameter
     enum State
     {
-        IDLE = 0,
-        RUNNING = 1,
-        DONE = 2,
-        FAILED = 3
+        Idle = 0,
+        Running = 1,
+        Done = 2,
+        Failed = 3
     };
 
     static const int32_t  MinSpread = 1200;
@@ -54,7 +54,7 @@ public:
     static const uint32_t TimeoutSeconds = 30;
 
     ResolverCalibrator()
-        : state(IDLE), minSamples(0), timeoutSamples(0), samples(0),
+        : state(Idle), minSamples(0), timeoutSamples(0), samples(0),
           sinMin(0), sinMax(0), cosMin(0), cosMax(0),
           sinOffset(0), cosOffset(0), cosGainPercent(100)
     {
@@ -69,12 +69,12 @@ public:
         sinMin = cosMin = 65536;
         sinMax = cosMax = -1;
         // Without a sample rate there is no way to time the calibration
-        state = pwmFrequency > 0 ? RUNNING : FAILED;
+        state = pwmFrequency > 0 ? Running : Failed;
     }
 
     void Update(uint16_t rawSin, uint16_t rawCos)
     {
-        if (state != RUNNING)
+        if (state != Running)
             return;
 
         if (rawSin < sinMin) sinMin = rawSin;
@@ -92,12 +92,12 @@ public:
             cosGainPercent = (100 * sinSpread + cosSpread / 2) / cosSpread;
             state = cosGainPercent >= ResolverMinGainPercent &&
                             cosGainPercent <= ResolverMaxGainPercent
-                        ? DONE
-                        : FAILED;
+                        ? Done
+                        : Failed;
         }
         else if (samples >= timeoutSamples)
         {
-            state = FAILED;
+            state = Failed;
         }
     }
 

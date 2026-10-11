@@ -20,32 +20,37 @@
 #ifndef C2000ENCODER_H
 #define C2000ENCODER_H
 
+#include "c2000/resolversample.h"
 #include "my_fp.h"
+#include "resolverencoder.h"
 #include <stdint.h>
 
 namespace c2000 {
 
 /**
- * Resolver-based encoder for the Tesla M3 inverter C2000 platform.
- * Wraps encoder::ResolverEncoder templated on MotorAnalogCapture with
- * sincosofs offset correction.
+ * Resolver-based encoder for the Tesla M3 inverter C2000 platform: a thin
+ * wrapper around the host-tested encoder::ResolverEncoder, fed with the
+ * calibrated ADC samples.
  */
 class Encoder
 {
 public:
-    static void     Reset();
-    static bool     SeenNorthSignal();
-    static void     UpdateRotorAngle(int32_t dir);
-    static void     UpdateRotorFrequency(int32_t callingFrequency);
-    static void     SetPwmFrequency(uint32_t frq);
+    static void     Reset() { Decoder::Reset(); }
+    static bool     SeenNorthSignal() { return Decoder::SeenNorthSignal(); }
+    static void     UpdateRotorAngle(int32_t dir) { Decoder::UpdateRotorAngle(dir); }
+    static void     UpdateRotorFrequency(int32_t callingFrequency)
+    {
+        Decoder::UpdateRotorFrequency(callingFrequency);
+    }
+    static void     SetPwmFrequency(uint32_t frq) { Decoder::SetPwmFrequency(frq); }
 
-    static uint16_t GetRotorAngle();
-    static u32fp    GetRotorFrequency();
-    static int32_t  GetRotorDirection();
-    static int32_t  GetSpeed();
-    static float    GetLastAbsTurns();
-    static float    GetLastMaxSignedDiff();
-    static uint32_t GetLastSampleCount();
+    static uint16_t GetRotorAngle() { return Decoder::GetRotorAngle(); }
+    static u32fp    GetRotorFrequency() { return Decoder::GetRotorFrequency(); }
+    static int32_t  GetRotorDirection() { return Decoder::GetRotorDirection(); }
+    static int32_t  GetSpeed() { return Decoder::GetSpeed(); }
+
+private:
+    typedef encoder::ResolverEncoder<CalibratedResolverSample> Decoder;
 };
 
 } // namespace c2000

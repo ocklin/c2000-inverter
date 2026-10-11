@@ -41,8 +41,8 @@ set(ISR_PATH_FILES
     libopeninv/include/sine_core.h
     libopeninv/src/sine_core.cpp
     platform/c2000/inverter_drivers/pwmdriver.cpp
-    platform/c2000/inverter_drivers/encoder.cpp
     platform/c2000/inverter_drivers/c2000/encoder.h
+    platform/c2000/inverter_drivers/c2000/resolversample.h
     platform/c2000/inverter_drivers/motoranalogcapture.cpp)
 list(TRANSFORM ISR_PATH_FILES PREPEND ${PROJECT_SOURCE_DIR}/)
 add_executable(IsrIntWidthTest testisrintwidth.cpp)

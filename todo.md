@@ -28,13 +28,15 @@ Working list; the phased plan is in `docs/RDU-FOC-bringup-plan.md`.
   trip uses the `udc` value as scaled in the ISR, which ignores `udcofs`.
 - [ ] DC-link trip: re-enable after a trip uses the same clear command as the
   over-current trip (`DcLinkTrip::Reset()` is not called anywhere yet).
-- [ ] **Resolver: make `c2000::Encoder` use `ResolverEncoder`.** The live
-  loss-of-signal check exists only in the host-testable
-  `include/resolverencoder.h`; `platform/c2000/inverter_drivers/encoder.cpp`
-  still has the latched `s_resolverPeakAmplitude`, so the hardware path is
-  unchanged. This is the hybrid decoder (decision 2): port the 100 ms
-  frequency calculation, spike rejection and calibration, then thin
-  `c2000::Encoder` into a wrapper.
+- [ ] **Resolver calibration on the bench (Phase 3).** With the motor phases
+  disconnected, set `rescal` to 1 over CAN and turn the shaft by hand for at
+  least 2 s (several turns). `rescalstat` goes to 2 (Done) and `resofssin`,
+  `resofscos`, `resgaincos` are written; 3 (Failed) means the swing was too
+  small, a channel is weak or dead, or 30 s passed. Then `save`.
+- [ ] Resolver, out of scope of the hybrid decoder: per-sample angle spike
+  rejection (one glitchy ADC pair feeds FOC; decide after seeing real signals),
+  a fixed-point `SineCore::Atan2` instead of `atan2f`, and hardware checks of
+  the angle-to-PWM phase (Phase 3/5).
 - [ ] Resolver signal monitor limits: radius lock/unlock levels (600/350
   counts) and the 16-sample debounce are estimates, assumed centred samples.
   Check against real amplitude and offset on the bench (Phase 3). A single dead
@@ -62,11 +64,16 @@ Working list; the phased plan is in `docs/RDU-FOC-bringup-plan.md`.
   of `respolepairs`, or the motor electrical frequency and angle are silently
   wrong (3 and 2 gives ratio 1). Check when the resolver pole pairs are known
   (Phase 5); reject or flag a non-integer ratio.
-- [ ] Remaining Phase 1 items: resolver hybrid decoder, HVIL window and
-  debounce.
+- [ ] Remaining Phase 1 item: HVIL window and debounce.
 
 ## Done
 
+- [x] Resolver hybrid decoder (plan
+  `docs/superpowers/plans/2026-10-11-resolver-hybrid-decoder.md`):
+  `c2000::Encoder` wraps `encoder::ResolverEncoder` on calibrated samples;
+  angle in [0, 2pi), mechanical turn counting, self-timed 100 ms frequency
+  window at any PWM frequency, 500 Hz spike rejection, no 200 Hz clamp, speed
+  from `respolepairs`, per-channel offset/gain calibration (`rescal`).
 - [x] MTPA constants into parameters: `fluxlink` (mWb, default 90, id 173) and
   `lqminusld` (uH, default 0, id 174) via `FOC::SetMtpaParameters`. Default 0
   runs with the d-axis current at zero for bring-up; 90/5800 reproduces the

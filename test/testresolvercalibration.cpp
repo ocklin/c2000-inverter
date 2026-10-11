@@ -57,16 +57,16 @@ TEST(ResolverCalibration, CalibratorIdleIgnoresSamples)
 {
     ResolverCalibrator cal;
     Feed(cal, 3, 2000, 800, 2100, 640);
-    EXPECT_EQ(cal.GetState(), ResolverCalibrator::IDLE);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Idle);
 }
 
 TEST(ResolverCalibration, CalibratorFindsOffsetsAndGain)
 {
     ResolverCalibrator cal;
     cal.Start(Pwm);
-    EXPECT_EQ(cal.GetState(), ResolverCalibrator::RUNNING);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Running);
     Feed(cal, 3, 2000, 800, 2100, 640);
-    ASSERT_EQ(cal.GetState(), ResolverCalibrator::DONE);
+    ASSERT_EQ(cal.GetState(), ResolverCalibrator::Done);
     EXPECT_NEAR(cal.SinOffset(), 2000, 2);
     EXPECT_NEAR(cal.CosOffset(), 2100, 2);
     EXPECT_NEAR(cal.CosGainPercent(), 125, 1);
@@ -77,7 +77,7 @@ TEST(ResolverCalibration, CalibratorWaitsForMinimumTime)
     ResolverCalibrator cal;
     cal.Start(Pwm);
     Feed(cal, 1, 2000, 800, 2100, 640);
-    EXPECT_EQ(cal.GetState(), ResolverCalibrator::RUNNING);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Running);
 }
 
 TEST(ResolverCalibration, CalibratorFailsWithoutRotation)
@@ -86,7 +86,7 @@ TEST(ResolverCalibration, CalibratorFailsWithoutRotation)
     cal.Start(Pwm);
     Feed(cal, 30, 2000, 800, 2100, 640, 0);
     cal.Update(2000, 2740);
-    EXPECT_EQ(cal.GetState(), ResolverCalibrator::FAILED);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Failed);
 }
 
 TEST(ResolverCalibration, CalibratorFailsOnPartialSwing)
@@ -94,9 +94,9 @@ TEST(ResolverCalibration, CalibratorFailsOnPartialSwing)
     ResolverCalibrator cal;
     cal.Start(Pwm);
     Feed(cal, 15, 2000, 800, 2100, 640, 1, 20);
-    EXPECT_EQ(cal.GetState(), ResolverCalibrator::RUNNING);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Running);
     Feed(cal, 15.1, 2000, 800, 2100, 640, 1, 20);
-    EXPECT_EQ(cal.GetState(), ResolverCalibrator::FAILED);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Failed);
 }
 
 TEST(ResolverCalibration, CalibratorFailsOnUnbalancedChannels)
@@ -105,17 +105,17 @@ TEST(ResolverCalibration, CalibratorFailsOnUnbalancedChannels)
     ResolverCalibrator weak;
     weak.Start(Pwm);
     Feed(weak, 29, 2000, 800, 2100, 300);
-    EXPECT_EQ(weak.GetState(), ResolverCalibrator::RUNNING);
+    EXPECT_EQ(weak.GetState(), ResolverCalibrator::Running);
     Feed(weak, 1.1, 2000, 800, 2100, 300);
-    EXPECT_EQ(weak.GetState(), ResolverCalibrator::FAILED);
+    EXPECT_EQ(weak.GetState(), ResolverCalibrator::Failed);
 
     // Strong cosine: gain 1600 / 3400 = 47 % is out of range
     ResolverCalibrator strong;
     strong.Start(Pwm);
     Feed(strong, 1, 2000, 800, 2100, 1700);
-    EXPECT_EQ(strong.GetState(), ResolverCalibrator::RUNNING);
+    EXPECT_EQ(strong.GetState(), ResolverCalibrator::Running);
     Feed(strong, 2, 2000, 800, 2100, 1700);
-    EXPECT_EQ(strong.GetState(), ResolverCalibrator::FAILED);
+    EXPECT_EQ(strong.GetState(), ResolverCalibrator::Failed);
 }
 
 TEST(ResolverCalibration, CalibratorRestartClearsPreviousResult)
@@ -123,17 +123,17 @@ TEST(ResolverCalibration, CalibratorRestartClearsPreviousResult)
     ResolverCalibrator cal;
     cal.Start(Pwm);
     Feed(cal, 3, 2000, 800, 2100, 640);
-    ASSERT_EQ(cal.GetState(), ResolverCalibrator::DONE);
+    ASSERT_EQ(cal.GetState(), ResolverCalibrator::Done);
     cal.Start(Pwm);
-    EXPECT_EQ(cal.GetState(), ResolverCalibrator::RUNNING);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Running);
     // A parked rotor must not reuse the earlier min/max
     Feed(cal, 30.1, 2000, 800, 2100, 640, 0);
-    EXPECT_EQ(cal.GetState(), ResolverCalibrator::FAILED);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Failed);
 }
 
 TEST(ResolverCalibration, CalibratorStartWithZeroFrequencyFails)
 {
     ResolverCalibrator cal;
     cal.Start(0);
-    EXPECT_EQ(cal.GetState(), ResolverCalibrator::FAILED);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Failed);
 }
