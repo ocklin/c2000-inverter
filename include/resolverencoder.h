@@ -44,6 +44,12 @@ static const float TwoPi = 2.0f * Pi;
 //! Angle difference at which we assume jitter to become irrelevant
 static const float StableAngle = (10.0f * TwoPi) / 360.0f;
 
+//! Resolver electrical frequency (Hz) at or above which a window is a spike
+static const float MaxPlausibleFrequency = 500.0f;
+
+//! Frequency windows per second: 100 ms windows
+static const uint32_t WindowsPerSecond = 10;
+
 } // namespace details
 
 template <typename ResolverSampleT>
@@ -65,6 +71,7 @@ public:
         sm_angle = 0.0f;
         sm_poleCounter = 0;
         sm_turnsSinceLastSample = 0;
+        sm_samplesInWindow = 0;
         sm_resolverLocked = false;
         sm_resolverLockedPrev = false;
     }
@@ -93,15 +100,10 @@ public:
         {
             sm_resolverLockedPrev = sm_resolverLocked;
             sm_turnsSinceLastSample = 0;
-            sm_lastAngle = sm_angle;
-            sm_startupDelay = sm_startupDelay > 0 ? sm_startupDelay - 1 : 0;
-            return;
         }
-        sm_resolverLockedPrev = sm_resolverLocked;
-
         // Each wrap across 0/2pi is one resolver electrical turn, in either
         // direction; respolepairs of them make one mechanical turn
-        if (UpdateTurns())
+        else if (UpdateTurns())
         {
             sm_poleCounter = sm_poleCounter + 1;
             if (sm_poleCounter >= Param::GetInt(Param::respolepairs))
@@ -113,6 +115,15 @@ public:
 
         sm_startupDelay = sm_startupDelay > 0 ? sm_startupDelay - 1 : 0;
         sm_lastAngle = sm_angle;
+
+        // Self-timed 100 ms frequency window, whatever the PWM frequency
+        uint32_t window = sm_pwmFrq / details::WindowsPerSecond;
+        sm_samplesInWindow = sm_samplesInWindow + 1;
+        if (sm_samplesInWindow >= (window > 0 ? window : 1))
+        {
+            UpdateRotorFrequency(details::WindowsPerSecond);
+            sm_samplesInWindow = 0;
+        }
     }
 
     //
@@ -122,18 +133,24 @@ public:
     //
     static void UpdateRotorFrequency(int32_t callingFrequency)
     {
-        float absTurns = ABS(sm_turnsSinceLastSample);
+        float absTurns = fabsf(sm_turnsSinceLastSample);
         if (sm_startupDelay == 0 && absTurns > details::StableAngle)
         {
-            sm_lastFrequency = (callingFrequency * absTurns) / details::TwoPi;
-            sm_detectedDirection =
-                sm_turnsSinceLastSample > 0 ? Forwards : Backwards;
+            float candidate = ((float)callingFrequency * absTurns) / details::TwoPi;
+            // An implausible window is a spike: keep the previous estimate
+            if (candidate < details::MaxPlausibleFrequency)
+            {
+                sm_lastFrequency = candidate;
+                sm_detectedDirection =
+                    sm_turnsSinceLastSample > 0.0f ? Forwards : Backwards;
+            }
         }
         else
         {
-            sm_lastFrequency = 0;
+            sm_lastFrequency = 0.0f;
+            sm_detectedDirection = Stationary;
         }
-        sm_turnsSinceLastSample = 0;
+        sm_turnsSinceLastSample = 0.0f;
     }
 
     //
@@ -144,6 +161,9 @@ public:
     static void SetPwmFrequency(uint32_t frq)
     {
         sm_pwmFrq = frq;
+        // A window spanning two sample periods would be timed wrongly
+        sm_samplesInWindow = 0;
+        sm_turnsSinceLastSample = 0.0f;
     }
 
     //
@@ -158,11 +178,17 @@ public:
     }
 
     //
-    //! \brief Get current speed in rpm
+    //! \brief Get current mechanical speed in rpm
+    //!
+    //! The measured frequency is the resolver's electrical frequency, so
+    //! divide by the resolver pole pairs, not the motor's
     //
-    static uint32_t GetSpeed()
+    static int32_t GetSpeed()
     {
-        return (60 * sm_lastFrequency) / Param::GetInt(Param::respolepairs);
+        int32_t respolepairs = Param::GetInt(Param::respolepairs);
+        if (respolepairs < 1)
+            respolepairs = 1;
+        return (int32_t)((60.0f * sm_lastFrequency) / (float)respolepairs);
     }
 
     //
@@ -276,6 +302,9 @@ private:
 
     static float sm_turnsSinceLastSample;
 
+    //! Samples in the current frequency window
+    static uint32_t sm_samplesInWindow;
+
     //! True while the signal monitor reports a good signal; cleared by Reset()
     static bool sm_resolverLocked;
 
@@ -314,6 +343,9 @@ int32_t ResolverEncoder<ResolverSampleT>::sm_poleCounter;
 
 template <typename ResolverSampleT>
 float ResolverEncoder<ResolverSampleT>::sm_turnsSinceLastSample;
+
+template <typename ResolverSampleT>
+uint32_t ResolverEncoder<ResolverSampleT>::sm_samplesInWindow;
 
 template <typename ResolverSampleT>
 bool ResolverEncoder<ResolverSampleT>::sm_resolverLocked;

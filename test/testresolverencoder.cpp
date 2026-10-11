@@ -271,9 +271,9 @@ static void ResetResolver()
 //! Feed the resolver a signal whose angle starts at startDeg and moves by
 //! degPerSample each update. DecodeAngle() reads sine first, so the phase
 //! advances after each cosine read.
-static void RotateResolver(MockResolverSampleImpl& sample, float startDeg,
-                           float degPerSample, int samples,
-                           int16_t amplitude = 1800)
+static double RotateResolver(MockResolverSampleImpl& sample, double startDeg,
+                             double degPerSample, int samples,
+                             int16_t amplitude = 1800)
 {
     double phase = startDeg;
     EXPECT_CALL(sample, ResolverSine)
@@ -290,6 +290,7 @@ static void RotateResolver(MockResolverSampleImpl& sample, float startDeg,
         }));
     for (int i = 0; i < samples; i++)
         Resolver::UpdateRotorAngle(1);
+    return phase;
 }
 
 TEST(TestResolverEncoder, NegativeHalfAngleMapsToUpperRange)
@@ -350,4 +351,115 @@ TEST(TestResolverEncoder, NoFullTurnWithoutCrossingZero)
     for (int i = 0; i < 2000; i++)
         Resolver::UpdateRotorAngle(1);
     EXPECT_EQ(Resolver::GetFullTurns(), 0u);
+}
+
+//! Degrees per sample for a resolver frequency at a PWM frequency
+static double DegPerSample(double resolverHz, double pwmHz)
+{
+    return 360.0 * resolverHz / pwmHz;
+}
+
+static float Frequency()
+{
+    return FP_TOFLOAT(Resolver::GetRotorFrequency());
+}
+
+//! 100 ms window at the default PWM frequency
+static const int Window = DefaultPwmFrequency / 10;
+
+TEST(TestResolverEncoder, FrequencyMeasuredWithoutExternalCalls)
+{
+    ResetResolver();
+    MockResolverSampleImpl sample;
+    RotateResolver(sample, 10, DegPerSample(20, DefaultPwmFrequency),
+                   StartupCount + 3 * Window);
+    EXPECT_NEAR(Frequency(), 20, 0.5);
+    EXPECT_EQ(Resolver::GetRotorDirection(), 1);
+}
+
+TEST(TestResolverEncoder, BackwardsRotationReportsMinusOne)
+{
+    ResetResolver();
+    MockResolverSampleImpl sample;
+    RotateResolver(sample, 10, -DegPerSample(20, DefaultPwmFrequency),
+                   StartupCount + 3 * Window);
+    EXPECT_NEAR(Frequency(), 20, 0.5);
+    EXPECT_EQ(Resolver::GetRotorDirection(), -1);
+}
+
+TEST(TestResolverEncoder, StoppingResetsDirectionToStationary)
+{
+    ResetResolver();
+    MockResolverSampleImpl sample;
+    double phase = RotateResolver(sample, 10, DegPerSample(20, DefaultPwmFrequency),
+                                  StartupCount + 3 * Window);
+    ASSERT_EQ(Resolver::GetRotorDirection(), 1);
+    RotateResolver(sample, phase, 0, 2 * Window);
+    EXPECT_EQ(Frequency(), 0);
+    EXPECT_EQ(Resolver::GetRotorDirection(), 0);
+}
+
+TEST(TestResolverEncoder, FrequencyAboveOldClampIsReported)
+{
+    ResetResolver();
+    MockResolverSampleImpl sample;
+    RotateResolver(sample, 10, DegPerSample(300, DefaultPwmFrequency),
+                   StartupCount + 3 * Window);
+    EXPECT_NEAR(Frequency(), 300, 5);
+}
+
+TEST(TestResolverEncoder, SpikeWindowKeepsPreviousFrequency)
+{
+    ResetResolver();
+    MockResolverSampleImpl sample;
+    // Settle on a window boundary (windows count from Reset)
+    double phase = RotateResolver(sample, 10, DegPerSample(20, DefaultPwmFrequency),
+                                  7 * Window);
+    ASSERT_NEAR(Frequency(), 20, 0.5);
+    // Exactly one window at an implausible 600 Hz
+    RotateResolver(sample, phase, DegPerSample(600, DefaultPwmFrequency), Window);
+    EXPECT_NEAR(Frequency(), 20, 0.5);
+    EXPECT_EQ(Resolver::GetRotorDirection(), 1);
+}
+
+TEST(TestResolverEncoder, SpeedUsesResolverPolePairs)
+{
+    ResetResolver();
+    Param::SetInt(Param::respolepairs, 2);
+    Param::SetInt(Param::polepairs, 4);
+    MockResolverSampleImpl sample;
+    RotateResolver(sample, 10, DegPerSample(20, DefaultPwmFrequency),
+                   StartupCount + 3 * Window);
+    // 20 Hz resolver electrical / 2 resolver pole pairs = 10 rev/s
+    EXPECT_NEAR(Resolver::GetSpeed(), 600, 6);
+}
+
+TEST(TestResolverEncoder, FrequencyCorrectAt6kAnd24kPwm)
+{
+    const uint32_t pwmFrequencies[] = { 6103, 24414 };
+    for (uint32_t pwm : pwmFrequencies)
+    {
+        ResetResolver();
+        Resolver::SetPwmFrequency(pwm);
+        MockResolverSampleImpl sample;
+        RotateResolver(sample, 10, DegPerSample(20, pwm),
+                       StartupCount + 3 * (pwm / 10));
+        EXPECT_NEAR(Frequency(), 20, 0.5) << "PWM " << pwm;
+    }
+}
+
+TEST(TestResolverEncoder, FrequencyCorrectAfterPwmFrequencyChange)
+{
+    ResetResolver();
+    MockResolverSampleImpl sample;
+    // Stop mid-window, then change the PWM frequency
+    double phase = RotateResolver(sample, 10, DegPerSample(20, DefaultPwmFrequency),
+                                  StartupCount + 3 * Window + Window / 2);
+    ASSERT_NEAR(Frequency(), 20, 0.5);
+    Resolver::SetPwmFrequency(24414);
+    // The first full window at the new frequency must already be right
+    phase = RotateResolver(sample, phase, DegPerSample(20, 24414), 24414 / 10);
+    EXPECT_NEAR(Frequency(), 20, 0.5);
+    RotateResolver(sample, phase, DegPerSample(20, 24414), 2 * (24414 / 10));
+    EXPECT_NEAR(Frequency(), 20, 0.5);
 }
