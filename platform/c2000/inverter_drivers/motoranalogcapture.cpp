@@ -189,7 +189,7 @@ void MotorAnalogCapture::InitTempMuxGpio()
         DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S2,
         DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S3
     };
-    for (int i = 0; i < 3; i++)
+    for (uint16_t i = 0; i < 3; i++)
     {
         GPIO_writePin(pins[i], 0);
         GPIO_setPadConfig(pins[i], GPIO_PIN_TYPE_STD);

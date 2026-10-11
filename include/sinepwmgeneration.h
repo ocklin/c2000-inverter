@@ -124,7 +124,7 @@ public:
 
     static void SetTorquePercent(float torque)
     {
-        const int   filterConst = 4;
+        const int32_t filterConst = 4;
         const float roundingError = FP_TOFLOAT((float)((1 << filterConst) - 1));
         ;
         float fslipmin = Param::GetFloat(Param::fslipmin);

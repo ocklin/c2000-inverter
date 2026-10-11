@@ -85,7 +85,7 @@ public:
     //! \param dir   Desired direction of rotation -1 (backwards), 0
     //! (stationary) or 1 (forwards)
     //
-    static void UpdateRotorAngle(__attribute__((__unused__)) int dir)
+    static void UpdateRotorAngle(__attribute__((__unused__)) int32_t dir)
     {
         sm_angle = DecodeAngle();
 
@@ -123,7 +123,7 @@ public:
     //!
     //! \param callingFrequency Frequency at which this function is called in Hz
     //
-    static void UpdateRotorFrequency(int callingFrequency)
+    static void UpdateRotorFrequency(int32_t callingFrequency)
     {
         float absTurns = ABS(sm_turnsSinceLastSample);
         if (sm_startupDelay == 0 && absTurns > details::StableAngle)
@@ -187,7 +187,7 @@ public:
     //! \brief Return the rotor direction with -1 (backwards), 0 (stationary) or
     //! 1 (forwards)
     //
-    static int GetRotorDirection()
+    static int32_t GetRotorDirection()
     {
         return sm_detectedDirection;
     }
@@ -208,7 +208,7 @@ private:
     {
         float signedDiff = sm_angle - sm_lastAngle;
         float absDiff = fabs(signedDiff);
-        int   sign = signedDiff < 0 ? -1 : 1;
+        int32_t sign = signedDiff < 0 ? -1 : 1;
 
         if (absDiff > details::Pi) // wrap detection
         {
@@ -273,7 +273,7 @@ private:
     static float sm_lastAngle;
 
     //! Number of poles we have seen in the current rotation
-    static int sm_poleCounter;
+    static int32_t sm_poleCounter;
 
     static float sm_turnsSinceLastSample;
 
@@ -311,7 +311,7 @@ template <typename ResolverSampleT>
 float ResolverEncoder<ResolverSampleT>::sm_lastAngle;
 
 template <typename ResolverSampleT>
-int ResolverEncoder<ResolverSampleT>::sm_poleCounter;
+int32_t ResolverEncoder<ResolverSampleT>::sm_poleCounter;
 
 template <typename ResolverSampleT>
 float ResolverEncoder<ResolverSampleT>::sm_turnsSinceLastSample;

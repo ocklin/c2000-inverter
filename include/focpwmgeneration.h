@@ -58,7 +58,7 @@ public:
         {
             static s32fp idcFiltered = 0;
             int32_t      dir = Param::GetInt(Param::dir);
-            int          moddedfwkp;
+            int32_t      moddedfwkp;
             int32_t      kifrqgain = Param::GetInt(Param::curkifrqgain);
             s32fp        id, iq;
 
@@ -158,7 +158,7 @@ public:
     {
         float brkrampstr = Param::GetFloat(Param::brkrampstr);
         float rotorfreq = FP_TOFLOAT(BaseT::frq);
-        int   direction = Param::GetInt(Param::dir);
+        int32_t direction = Param::GetInt(Param::dir);
 
         if (rotorfreq < brkrampstr && torquePercent < 0)
         {
@@ -246,7 +246,7 @@ private:
         {
             uint16_t syncOfs = Param::GetInt(Param::syncofs);
             uint16_t rotorAngle = EncoderT::GetRotorAngle();
-            int syncadv = BaseT::frqFiltered * Param::GetInt(Param::syncadv);
+            int32_t syncadv = BaseT::frqFiltered * Param::GetInt(Param::syncadv);
             syncadv = MAX(0, syncadv);
 
             // Compensate rotor movement that happened between sampling and

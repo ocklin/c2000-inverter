@@ -128,7 +128,7 @@ void FOC::InvParkClarke(int32_t ud, int32_t uq)
 
    int32_t offset = SineCore::CalcSVPWMOffset(DutyCycles[0], DutyCycles[1], DutyCycles[2]);
 
-   for (int i = 0; i < 3; i++)
+   for (uint16_t i = 0; i < 3; i++)
    {
       /* subtract it from all 3 phases -> no difference in phase-to-phase voltage */
       DutyCycles[i] -= offset;

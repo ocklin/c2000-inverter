@@ -35,7 +35,7 @@ const uint32_t SineCore::minPulse = 1000;
 uint32_t SineCore::ampl = 0;
 const int16_t SineCore::SinTab[] = { SINTAB };/* sine LUT */
 const uint16_t SineCore::ZERO_OFFSET = SINTAB_MAX / 2;
-const int SineCore::BITS = 16;
+const int32_t SineCore::BITS = 16;
 const uint16_t SineCore::MAXAMP = 37813;
 uint32_t SineCore::DutyCycles[3];
 

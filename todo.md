@@ -40,12 +40,22 @@ Working list; the phased plan is in `docs/RDU-FOC-bringup-plan.md`.
   Check against real amplitude and offset on the bench (Phase 3). A single dead
   channel is not detected by the radius check while the rotor is parked near
   the other channel's peak.
-- [ ] Remaining Phase 1 items:
-  16-bit `int` overflow audit with a host test, resolver hybrid decoder, MTPA
+- [ ] 16-bit audit, second pass: the `IsrIntWidthTest` guard only catches
+  declarations. Still to review by hand: 16-bit intermediates (`uint16_t *
+  uint16_t`, `int16_t` arithmetic and integer literals all promote to a 16-bit
+  `int` on the C28x), and `FP_FROMINT` on values above 1023 that are plain
+  `int`. Keep the `ISR_PATH_FILES` list in `test/CMakeLists.txt` in step when
+  files join the ISR path (e.g. when `c2000::Encoder` wraps `ResolverEncoder`).
+- [ ] Remaining Phase 1 items: resolver hybrid decoder, MTPA
   constants into parameters, HVIL window and debounce.
 
 ## Done
 
+- [x] 16-bit `int` audit of the ISR path: `syncadv` and `moddedfwkp` in
+  `include/focpwmgeneration.h` overflowed on the C28x (for example 200 Hz with
+  `syncadv` 6 gives 38400). All plain `int` in the ISR files replaced with
+  fixed-width types; `IsrIntWidthTest` (`test/testisrintwidth.cpp`) fails on
+  any new one.
 - [x] Live resolver loss-of-signal check (`include/resolversignalmonitor.h`,
   `test/testresolversignal.cpp`) in `ResolverEncoder`: locks at any parked
   angle, unlocks when the signal disappears, holds the last angle. The angle is

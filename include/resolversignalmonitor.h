@@ -20,7 +20,7 @@ public:
     //! Radius (counts) below which the signal counts as lost
     static const int32_t UnlockRadius = 350;
     //! Consecutive samples needed to change state
-    static const int DebounceSamples = 16;
+    static const uint16_t DebounceSamples = 16;
 
     ResolverSignalMonitor() : locked(false), usable(false), count(0) {}
 
@@ -59,7 +59,7 @@ public:
 private:
     bool locked;
     bool usable;
-    int  count;
+    uint16_t count;
 };
 
 } // namespace encoder

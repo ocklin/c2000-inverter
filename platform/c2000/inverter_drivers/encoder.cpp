@@ -54,10 +54,10 @@ static float    s_angle                 = 0.0f;
 static float    s_lastAngle             = 0.0f;
 static float    s_turnsSinceLastSample  = 0.0f;  // float avoids int truncation
 static float    s_lastFrequency         = 0.0f;
-static int      s_detectedDirection     = 0;
+static int32_t  s_detectedDirection     = 0;
 static int32_t  s_startupDelay          = 0;
 static uint32_t s_fullTurns             = 0;
-static int      s_poleCounter           = 0;
+static int32_t  s_poleCounter           = 0;
 static uint32_t s_pwmFrq __attribute__((unused)) = 1;
 static int16_t  s_resolverPeakAmplitude = 0;
 static float    s_lastAbsTurns          = 0.0f;
@@ -181,7 +181,7 @@ bool Encoder::SeenNorthSignal()
  * Update rotor angle from resolver ADC readings.
  * Called every PWM cycle from SinePwmGeneration::Run() / FocPwmGeneration::Run().
  */
-void Encoder::UpdateRotorAngle(int /*dir*/)
+void Encoder::UpdateRotorAngle(int32_t /*dir*/)
 {
     s_angle = DecodeAngle();
 
@@ -210,7 +210,7 @@ void Encoder::UpdateRotorAngle(int /*dir*/)
  * Must be called at a known, regular rate (callingFrequency Hz).
  * Called at 10 Hz (every 100 ms) via scheduler task.
  */
-void Encoder::UpdateRotorFrequency(int callingFrequency)
+void Encoder::UpdateRotorFrequency(int32_t callingFrequency)
 {
     float absTurns = s_turnsSinceLastSample < 0.0f
                          ? -s_turnsSinceLastSample
@@ -282,15 +282,15 @@ u32fp Encoder::GetRotorFrequency()
 }
 
 /** Return motor speed in RPM (electrical frequency * 60 / pole pairs). */
-int Encoder::GetSpeed()
+int32_t Encoder::GetSpeed()
 {
-    int polepairs = Param::GetInt(Param::polepairs);
+    int32_t polepairs = Param::GetInt(Param::polepairs);
     if (polepairs == 0) polepairs = 1;
-    return (int)(FP_TOFLOAT(GetRotorFrequency()) * 60.0f / polepairs);
+    return (int32_t)(FP_TOFLOAT(GetRotorFrequency()) * 60.0f / polepairs);
 }
 
 /** Return -1 (backwards), 0 (stationary), or 1 (forwards). */
-int Encoder::GetRotorDirection()
+int32_t Encoder::GetRotorDirection()
 {
     return s_detectedDirection;
 }

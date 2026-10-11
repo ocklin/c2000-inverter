@@ -33,7 +33,7 @@ class SineCore
       static int32_t CalcSVPWMOffset(int32_t a, int32_t b, int32_t c);
       static uint32_t DutyCycles[3];
       static uint32_t Offset;
-      static const int BITS;
+      static const int32_t BITS;
       static const uint16_t MAXAMP;
 
    private:

@@ -35,14 +35,14 @@ class Encoder
 public:
     static void     Reset();
     static bool     SeenNorthSignal();
-    static void     UpdateRotorAngle(int dir);
-    static void     UpdateRotorFrequency(int callingFrequency);
+    static void     UpdateRotorAngle(int32_t dir);
+    static void     UpdateRotorFrequency(int32_t callingFrequency);
     static void     SetPwmFrequency(uint32_t frq);
 
     static uint16_t GetRotorAngle();
     static u32fp    GetRotorFrequency();
-    static int      GetRotorDirection();
-    static int      GetSpeed();
+    static int32_t  GetRotorDirection();
+    static int32_t  GetSpeed();
     static float    GetLastAbsTurns();
     static float    GetLastMaxSignedDiff();
     static uint32_t GetLastSampleCount();

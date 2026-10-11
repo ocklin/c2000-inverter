@@ -23,6 +23,31 @@ add_executable(DcLinkTripTest testdclinktrip.cpp)
 target_link_libraries(DcLinkTripTest PRIVATE global_options libopeninv link_last)
 add_test(NAME DcLinkTripTest COMMAND DcLinkTripTest)
 
+# Files on the control ISR path; on the C28x a plain int is only 16 bits.
+set(ISR_PATH_FILES
+    include/focpwmgeneration.h
+    include/pwmgenerationbase.h
+    include/sinepwmgeneration.h
+    include/resolverencoder.h
+    include/resolversignalmonitor.h
+    include/overcurrenttrip.h
+    include/dclinktrip.h
+    include/hvilinterlock.h
+    libopeninv/include/foc.h
+    libopeninv/src/foc.cpp
+    libopeninv/include/picontroller.h
+    libopeninv/src/picontroller.cpp
+    libopeninv/include/sine_core.h
+    libopeninv/src/sine_core.cpp
+    platform/c2000/inverter_drivers/pwmdriver.cpp
+    platform/c2000/inverter_drivers/encoder.cpp
+    platform/c2000/inverter_drivers/c2000/encoder.h
+    platform/c2000/inverter_drivers/motoranalogcapture.cpp)
+list(TRANSFORM ISR_PATH_FILES PREPEND ${PROJECT_SOURCE_DIR}/)
+add_executable(IsrIntWidthTest testisrintwidth.cpp)
+target_link_libraries(IsrIntWidthTest PRIVATE global_options)
+add_test(NAME IsrIntWidthTest COMMAND IsrIntWidthTest ${ISR_PATH_FILES})
+
 # Unit test the library
 file(
   GLOB
