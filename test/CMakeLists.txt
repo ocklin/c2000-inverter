@@ -15,6 +15,10 @@ add_executable(HvilInterlockTest testhvil.cpp)
 target_link_libraries(HvilInterlockTest PRIVATE global_options libopeninv link_last)
 add_test(NAME HvilInterlockTest COMMAND HvilInterlockTest)
 
+add_executable(OverCurrentTripTest testovercurrent.cpp)
+target_link_libraries(OverCurrentTripTest PRIVATE global_options libopeninv link_last)
+add_test(NAME OverCurrentTripTest COMMAND OverCurrentTripTest)
+
 # Unit test the library
 file(
   GLOB

@@ -24,6 +24,7 @@
 #include "errormessage.h"
 #include "params.h"
 #include "hvilinterlock.h"
+#include "overcurrenttrip.h"
 #include "c2000/encoder.h"
 #include "c2000/motoranalogcapture.h"
 #include "c2000/performancecounter.h"
@@ -32,6 +33,7 @@
 namespace c2000 {
 
 static HvilInterlock hvilInterlock;
+static OverCurrentTrip overCurrentTrip;
 
 /** Phase delay between the resolver exciter square wave and the phase PWM.
  * Measured as approx 32.8 uSec between centre of exciter square wave and peak
@@ -178,6 +180,30 @@ __interrupt void motor_control_adc_isr(void)
         Param::SetEnum(Param::opmode, OFF);
         ErrorMessage::Post(ERR_HVIL);
         Param::SetInt(Param::lasterr, ErrorMessage::GetLastError());
+    }
+
+    // Software over-current trip on the sampled phase currents. Offsets are
+    // calibrated before the first enable, so only check while running.
+    if (Param::GetInt(Param::opmode) != OFF)
+    {
+        const s32fp il1 = FP_DIV(
+            FP_FROMINT((int32_t)MotorAnalogCapture::PhaseACurrent()) -
+                PwmGeneration::GetCurrentOffset(0),
+            Param::Get(Param::il1gain));
+        const s32fp il2 = FP_DIV(
+            FP_FROMINT((int32_t)MotorAnalogCapture::PhaseBCurrent()) -
+                PwmGeneration::GetCurrentOffset(1),
+            Param::Get(Param::il2gain));
+        overCurrentTrip.Update(il1, il2, Param::Get(Param::ocurlim));
+        if (overCurrentTrip.Tripped())
+        {
+            PwmDriver::DisableMasterOutput();
+            PwmGeneration::SetOpmode(OFF);
+            Param::SetEnum(Param::opmode, OFF);
+            PwmGeneration::SetOvercurrentTripped();
+            ErrorMessage::Post(ERR_OVERCURRENT);
+            Param::SetInt(Param::lasterr, ErrorMessage::GetLastError());
+        }
     }
 
     PwmGeneration::Run();
