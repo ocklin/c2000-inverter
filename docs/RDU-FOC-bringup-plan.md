@@ -59,7 +59,7 @@ Offer fixes back to the upstream fork as PRs. Report H-revision findings to the 
 1. Over-current protection (decided): software trip in the ISR in Phase 1, comparator into the Trip-Zone in Phase 7 before higher power. The software trip covers moderate faults at bring-up limits; the gate drivers' DESAT (enabled in `gatedriver.cpp`, 8 V threshold; not verified on this board) covers hard shorts; the comparator closes the fast middle range.
 2. Resolver decoder (decided): hybrid, as described in Phase 1.
 3. Upstream (open): open PRs to the upstream fork as fixes land, or keep work here until the rear unit spins.
-4. Equipment (open): oscilloscope, current clamp or shunt, and a CAN adapter are needed from Phase 3; availability not yet confirmed.
+4. Equipment (decided): oscilloscope, CAN adapter, a simple current clamp and 3 W shunt resistors are available; see appendix D. A higher-current measurement solution is decided after Phase 4.
 
 ## Appendix A: Code review findings (commit d52a194 plus the HVIL PR)
 
@@ -124,3 +124,22 @@ Firmware smoke test (RAM load):
 Record a baseline: idle current at 12 V, HVIL current, current offsets, temperatures, resolver amplitude.
 
 Done when: the unit boots RAM firmware repeatably, nothing overheats, and the baseline is recorded.
+
+## Appendix D: Measurement equipment
+
+Available: oscilloscope, CAN adapter, a simple current clamp, 3 W shunt resistors.
+
+| Tool | Use |
+|---|---|
+| Oscilloscope | PWM outputs at the MCU test points, resolver exciter and sin/cos, ADC sampling instant versus the PWM centre, protection shutdown latency (Phase 7). |
+| CAN adapter | `oic` and `tools/can_logger.py`: the firmware's own currents, DC link, resolver angle and temperatures. |
+| 3 W shunts | Supply and idle currents, and a check of the firmware's current scaling. |
+| Simple clamp | Rough sanity checks only. |
+
+Shunt sizing (derate to about half the rating for continuous use): 0.1 ohm gives 0.1 V and 0.1 W at 1 A, 0.3 V and 0.9 W at 3 A, which covers the 1 A supply phases and the first 3 to 5 A on the pack. About 1 ohm suits the idle draw of the logic board (tens to hundreds of mA). Above about 5 A a 3 W shunt is the wrong tool; decide on a low-ohm, higher-power shunt or a DC-capable clamp after Phase 4, when the real currents are known (needed from Phase 6).
+
+Rules:
+- Put the shunt in the DC supply lead and read it with a multimeter on the millivolt range. Do not use a grounded scope probe across it: the probe ground is earth and can short the supply. For floating measurements use a differential probe or a battery-powered meter.
+- Do not put a shunt in a motor phase lead and read it directly: both ends switch with the PWM.
+- Cross-check: the firmware estimates DC current (`idc`) from the d/q voltages and currents. Compare it with the DC shunt reading. A large mismatch points to a wrong current gain (`il1gain`, `il2gain`) or sign.
+- Before probing any test point, confirm it is on the logic (cold) side, using `M3-Inverter-Test-Points.ods` in damienmaguire/Tesla-Model-3-Drive-Unit (not yet read; its test points are for his board and the Tesla board needs checking separately).
