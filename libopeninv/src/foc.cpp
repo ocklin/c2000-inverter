@@ -31,10 +31,15 @@
 #define S3 FP_FROMFLT(1)
 #define RADSTART(x) x < R1 ? S1 : (x < R2 ? S2 : S3)
 
-static const s32fp fluxLinkage = FP_FROMFLT(0.09);
-static const s32fp fluxLinkage2 = FP_MUL(fluxLinkage, fluxLinkage);
-static const s32fp lqminusldSquaredBs10 = FP_FROMFLT(0.01722); //additional 10-bit left shift because otherwise it can't be represented
-static const s32fp lqminusld = FP_FROMFLT(0.0058);
+// SetMtpaParameters scaling assumes Q15 (compile-time check, C++03-safe)
+typedef char MtpaScalingAssumesQ15[(FRAC_FAC == 32768) ? 1 : -1];
+
+// MTPA motor constants, set by SetMtpaParameters(). Defaults are the former
+// hard-coded values: flux linkage 0.09 Wb, Lq - Ld = 5.8 mH.
+static s32fp fluxLinkage = FP_FROMFLT(0.09);
+static s32fp fluxLinkage2 = FP_MUL(fluxLinkage, fluxLinkage);
+static s32fp lqminusldSquaredBs10 = FP_FROMFLT(0.01722); //additional 10-bit left shift because otherwise it can't be represented
+static s32fp lqminusld = FP_FROMFLT(0.0058);
 static const s32fp sqrt3 = FP_FROMFLT(1.732050807568877293527446315059);
 static const s32fp sqrt3inv1 = FP_FROMFLT(0.57735026919); //1/sqrt(3)
 static const s32fp zeroOffset = FP_FROMINT(1L);
@@ -73,6 +78,22 @@ void FOC::ParkClarke(s32fp il1, s32fp il2)
    iq = FP_MUL(cos, ib) - FP_MUL(sin, ia);
 }
 
+/** \brief Set the motor constants used by Mtpa()
+ *
+ * \param fluxLinkageMilliWb permanent-magnet flux linkage in mWb
+ * \param lqMinusLdMicroH saliency Lq - Ld in uH; 0 puts all current on the q axis
+ */
+void FOC::SetMtpaParameters(int32_t fluxLinkageMilliWb, int32_t lqMinusLdMicroH)
+{
+   fluxLinkage = (fluxLinkageMilliWb * FRAC_FAC) / 1000;
+   fluxLinkage2 = FP_MUL(fluxLinkage, fluxLinkage);
+   // FRAC_FAC / 1e6 == 4096 / 125000; fits int32 up to 500000 uH
+   lqminusld = (lqMinusLdMicroH * 4096) / 125000;
+   // (Lq - Ld)^2 << 10, halved: >> 6 rather than >> 5. This reproduces the
+   // former constant 0.01722, which is half of 0.0058^2 * 1024.
+   lqminusldSquaredBs10 = (lqminusld * lqminusld) >> (CST_DIGITS - 10 + 1);
+}
+
 /** \brief distribute motor current in magnetic torque and reluctance torque with the least total current
  *
  * \param[in] is int32_t total motor current
@@ -82,6 +103,13 @@ void FOC::ParkClarke(s32fp il1, s32fp il2)
  */
 void FOC::Mtpa(int32_t is, int32_t& idref, int32_t& iqref)
 {
+   if (lqminusld == 0)
+   {
+      idref = 0;
+      iqref = is;
+      return;
+   }
+
    int32_t isSquared = is * is;
    int32_t sign = is < 0 ? -1 : 1;
    s32fp term1 = fpsqrt(fluxLinkage2 + ((lqminusldSquaredBs10 * isSquared) >> 10));

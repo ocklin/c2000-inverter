@@ -235,10 +235,65 @@ TEST(TestFocCalc, MaximumTorquePerAmp)
     int32_t idref;
     int32_t iqref;
 
+    FOC::SetMtpaParameters(90, 5800);
     FOC::Mtpa(10, idref, iqref);
     auto iref = FloatMtpa(10);
     EXPECT_THAT(idref, IntNear(floor(iref.first), 1));
     EXPECT_THAT(iqref, IntNear(floor(iref.second), 1));
+}
+
+//! The former hard-coded constants (0.09 Wb, Lq - Ld = 5.8 mH) given as
+//! parameters must reproduce the former results exactly. Golden values were
+//! captured from FOC::Mtpa before the constants became parameters.
+TEST(TestFocCalc, MtpaFormerConstantsAsParametersGiveSameResult)
+{
+    const int32_t golden[][3] = {
+        { 0, 0, 0 },      { 1, 0, 1 },       { 10, -2, 9 },  { 50, -24, 43 },
+        { 100, -57, 82 }, { 300, -202, 221 }, { -100, -57, -82 },
+    };
+    FOC::SetMtpaParameters(90, 5800);
+    for (const auto& g : golden)
+    {
+        int32_t idref, iqref;
+        FOC::Mtpa(g[0], idref, iqref);
+        EXPECT_EQ(idref, g[1]) << "is " << g[0];
+        EXPECT_EQ(iqref, g[2]) << "is " << g[0];
+    }
+}
+
+//! Zero saliency (Lq == Ld) means no reluctance torque: all current on q.
+//! This is the bring-up setting.
+TEST(TestFocCalc, MtpaZeroSaliencyGivesZeroId)
+{
+    FOC::SetMtpaParameters(90, 0);
+    const int32_t currents[] = { 0, 10, -10, 500, -2000 };
+    for (int32_t is : currents)
+    {
+        int32_t idref = 123, iqref = 456;
+        FOC::Mtpa(is, idref, iqref);
+        EXPECT_EQ(idref, 0) << "is " << is;
+        EXPECT_EQ(iqref, is) << "is " << is;
+    }
+}
+
+TEST(TestFocCalc, MtpaMoreSaliencyGivesMoreNegativeId)
+{
+    int32_t idLow, idHigh, iq;
+    FOC::SetMtpaParameters(90, 5800);
+    FOC::Mtpa(100, idLow, iq);
+    FOC::SetMtpaParameters(90, 11600);
+    FOC::Mtpa(100, idHigh, iq);
+    EXPECT_LT(idHigh, idLow);
+}
+
+TEST(TestFocCalc, MtpaLessFluxLinkageGivesMoreNegativeId)
+{
+    int32_t idStrong, idWeak, iq;
+    FOC::SetMtpaParameters(90, 5800);
+    FOC::Mtpa(100, idStrong, iq);
+    FOC::SetMtpaParameters(45, 5800);
+    FOC::Mtpa(100, idWeak, iq);
+    EXPECT_LT(idWeak, idStrong);
 }
 
 TEST(TestFocCalc, GetMaximumModulationIndex)

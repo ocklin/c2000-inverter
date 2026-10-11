@@ -174,6 +174,9 @@ public:
             Param::GetFloat(Param::throtcur) * direction * torquePercent;
         int32_t id, iq;
 
+        // lqminusld 0 (the default) puts all current on the q axis
+        FOC::SetMtpaParameters(
+            Param::GetInt(Param::fluxlink), Param::GetInt(Param::lqminusld));
         FOC::Mtpa(is, id, iq);
 
         qController.SetRef(FP_FROMINT(iq));

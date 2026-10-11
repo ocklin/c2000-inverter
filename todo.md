@@ -46,11 +46,26 @@ Working list; the phased plan is in `docs/RDU-FOC-bringup-plan.md`.
   `int` on the C28x), and `FP_FROMINT` on values above 1023 that are plain
   `int`. Keep the `ISR_PATH_FILES` list in `test/CMakeLists.txt` in step when
   files join the ISR path (e.g. when `c2000::Encoder` wraps `ResolverEncoder`).
-- [ ] Remaining Phase 1 items: resolver hybrid decoder, MTPA
-  constants into parameters, HVIL window and debounce.
+- [ ] **MTPA formula (before using `lqminusld` > 0, Phase 8).** The fixed-point
+  `FOC::Mtpa` gives about half the d-axis current of its own float reference
+  in `test/testfoccalc.cpp`: the former constant 0.01722 is half of
+  (Lq - Ld)^2 * 1024, and `SetMtpaParameters` keeps that halving on purpose.
+  Neither matches TI SPRACF3 (id = (psi - sqrt(psi^2 + 8 (Lq-Ld)^2 is^2)) /
+  (4 (Lq-Ld))). Decide on the correct formula with measured motor constants.
+- [ ] **MTPA overflows above about 400 A**: `FP_DIV(fluxLinkage - term1,
+  lqminusld)` shifts a Q15 value left by 15 and overflows int32 (is = 600
+  gives id = -249 instead of about -409). Irrelevant while `lqminusld` is 0.
+- [ ] `FocPwmGeneration::SetTorquePercent` reads `fluxlink`/`lqminusld` on each
+  call; there is no host test at the generation level for that wiring.
+- [ ] Remaining Phase 1 items: resolver hybrid decoder, HVIL window and
+  debounce.
 
 ## Done
 
+- [x] MTPA constants into parameters: `fluxlink` (mWb, default 90, id 173) and
+  `lqminusld` (uH, default 0, id 174) via `FOC::SetMtpaParameters`. Default 0
+  runs with the d-axis current at zero for bring-up; 90/5800 reproduces the
+  former results exactly (golden test).
 - [x] 16-bit `int` audit of the ISR path: `syncadv` and `moddedfwkp` in
   `include/focpwmgeneration.h` overflowed on the C28x (for example 200 Hz with
   `syncadv` 6 gives 38400). All plain `int` in the ISR files replaced with
