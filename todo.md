@@ -20,11 +20,21 @@ Working list; the phased plan is in `docs/RDU-FOC-bringup-plan.md`.
   noise is seen on the bench. Currently a single sample over the limit trips.
 - [ ] Over-current trip: the ISR wiring and the ADC scaling have no host test;
   verify on the scope in Phase 7.
-- [ ] Remaining Phase 1 items: live resolver-signal check, `udc*` trip,
+- [ ] **DC-link trip vs bench voltages.** Under-voltage trips below `udcmin`
+  (default 60 V) while running, and over-voltage above `udclim` (default
+  450 V). Before any run on the 12 to 20 V supply or the 53 V pack, set
+  `udcmin` below the bus voltage and `udclim` just above the pack's maximum
+  (about 58.8 V for 14S). Add both to the Phase 2/3 checklists. Also: the
+  trip uses the `udc` value as scaled in the ISR, which ignores `udcofs`.
+- [ ] DC-link trip: re-enable after a trip uses the same clear command as the
+  over-current trip (`DcLinkTrip::Reset()` is not called anywhere yet).
+- [ ] Remaining Phase 1 items: live resolver-signal check,
   16-bit `int` overflow audit with a host test, resolver hybrid decoder, MTPA
   constants into parameters, HVIL window and debounce.
 
 ## Done
 
+- [x] DC-link over- and under-voltage trip (`include/dclinktrip.h`,
+  `test/testdclinktrip.cpp`), wired into the ISR; new `ERR_UNDERVOLTAGE`.
 - [x] Software over-current trip logic and ISR wiring, with host tests
   (`test/testovercurrent.cpp`).

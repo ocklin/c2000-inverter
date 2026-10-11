@@ -25,6 +25,7 @@
 #include "params.h"
 #include "hvilinterlock.h"
 #include "overcurrenttrip.h"
+#include "dclinktrip.h"
 #include "c2000/encoder.h"
 #include "c2000/motoranalogcapture.h"
 #include "c2000/performancecounter.h"
@@ -34,6 +35,7 @@ namespace c2000 {
 
 static HvilInterlock hvilInterlock;
 static OverCurrentTrip overCurrentTrip;
+static DcLinkTrip dcLinkTrip;
 
 /** Phase delay between the resolver exciter square wave and the phase PWM.
  * Measured as approx 32.8 uSec between centre of exciter square wave and peak
@@ -206,6 +208,25 @@ __interrupt void motor_control_adc_isr(void)
         }
     }
 
+    // Update DC link voltage every PWM cycle for low-latency protection
+    float udcgain = Param::GetFloat(Param::udcgain);
+    if (udcgain > 0)
+        Param::SetFloat(Param::udc, (float)MotorAnalogCapture::UdcVoltage() / udcgain);
+
+    // DC-link over- and under-voltage trip. Under-voltage only while running:
+    // the link is at about 0 V before precharge.
+    dcLinkTrip.Update(Param::Get(Param::udc), Param::Get(Param::udcmin),
+        Param::Get(Param::udclim), Param::GetInt(Param::opmode) != OFF);
+    if (dcLinkTrip.State() != DcLinkTrip::OK)
+    {
+        PwmDriver::DisableMasterOutput();
+        PwmGeneration::SetOpmode(OFF);
+        Param::SetEnum(Param::opmode, OFF);
+        ErrorMessage::Post(dcLinkTrip.State() == DcLinkTrip::OVER ?
+            ERR_OVERVOLTAGE : ERR_UNDERVOLTAGE);
+        Param::SetInt(Param::lasterr, ErrorMessage::GetLastError());
+    }
+
     PwmGeneration::Run();
 
     static uint16_t s_freqUpdateCounter = 0;
@@ -215,11 +236,6 @@ __interrupt void motor_control_adc_isr(void)
         Encoder::UpdateRotorFrequency(10);
         Param::SetInt(Param::speed, Encoder::GetSpeed());
     }
-
-    // Update DC link voltage every PWM cycle for low-latency protection
-    float udcgain = Param::GetFloat(Param::udcgain);
-    if (udcgain > 0)
-        Param::SetFloat(Param::udc, (float)MotorAnalogCapture::UdcVoltage() / udcgain);
 
     // Measure the time - handles timer overflows
     uint32_t totalTime = startTime - PerformanceCounter::GetCount();
@@ -511,6 +527,8 @@ uint16_t PwmDriver::TimerSetup(
     // Disable sync(Freeze clock to PWM as well).
     SysCtl_disablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
     hvilInterlock.Configure(EPWM_FREQ / (2UL * pwmmax));
+    // Require about 1 ms of consecutive under-voltage samples.
+    dcLinkTrip.Configure((EPWM_FREQ / (2UL * pwmmax)) / 1000U + 1U);
 
     if (IsTeslaM3Inverter())
     {

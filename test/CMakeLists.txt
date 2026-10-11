@@ -19,6 +19,10 @@ add_executable(OverCurrentTripTest testovercurrent.cpp)
 target_link_libraries(OverCurrentTripTest PRIVATE global_options libopeninv link_last)
 add_test(NAME OverCurrentTripTest COMMAND OverCurrentTripTest)
 
+add_executable(DcLinkTripTest testdclinktrip.cpp)
+target_link_libraries(DcLinkTripTest PRIVATE global_options libopeninv link_last)
+add_test(NAME DcLinkTripTest COMMAND DcLinkTripTest)
+
 # Unit test the library
 file(
   GLOB
