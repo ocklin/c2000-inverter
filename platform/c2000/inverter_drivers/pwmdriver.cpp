@@ -232,17 +232,35 @@ __interrupt void motor_control_adc_isr(void)
         Param::SetInt(Param::lasterr, ErrorMessage::GetLastError());
     }
 
+    // The controller decodes the resolver while running; keep the decoder
+    // tracking while off so the angle, speed and loss-of-signal check stay live
+    const bool outputOff = Param::GetInt(Param::opmode) == OFF;
+    if (outputOff)
+        Encoder::UpdateRotorAngle(0);
+
     PwmGeneration::Run();
 
     // The encoder times its own 100 ms frequency window
     Param::SetInt(Param::speed, Encoder::GetSpeed());
 
-    // Resolver calibration: started by setting rescal to 1 while the shaft
-    // is turned by hand
-    if (Param::GetInt(Param::rescal) == 1 &&
-        resolverCalibrator.GetState() != encoder::ResolverCalibrator::Running)
+    // Resolver calibration: started by setting rescal to 1 while the output
+    // is off and the shaft is turned by hand. Writing new offsets while the
+    // motor runs would jump the angle under load, so only while off; clearing
+    // rescal or enabling the output aborts it
+    const bool calRequested = Param::GetInt(Param::rescal) == 1;
+    if (resolverCalibrator.GetState() == encoder::ResolverCalibrator::Running &&
+        (!calRequested || !outputOff))
     {
-        resolverCalibrator.Start(s_pwmFrequency);
+        resolverCalibrator.Abort();
+        Param::SetInt(Param::rescal, 0);
+    }
+    else if (calRequested &&
+             resolverCalibrator.GetState() != encoder::ResolverCalibrator::Running)
+    {
+        if (outputOff)
+            resolverCalibrator.Start(s_pwmFrequency);
+        else
+            Param::SetInt(Param::rescal, 0);
     }
     if (resolverCalibrator.GetState() == encoder::ResolverCalibrator::Running)
     {

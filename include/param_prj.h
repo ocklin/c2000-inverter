@@ -24,8 +24,8 @@
    2. Temporary parameters (id = 0)
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 173
-//Next value Id: 2070
+//Next param id (increase when adding new parameter!): 179
+//Next value Id: 2071
 /*              category     name         unit       min     max     default id */
 
 #define MOTOR_PARAMETERS_COMMON \

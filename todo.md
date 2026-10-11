@@ -37,6 +37,12 @@ Working list; the phased plan is in `docs/RDU-FOC-bringup-plan.md`.
   rejection (one glitchy ADC pair feeds FOC; decide after seeing real signals),
   a fixed-point `SineCore::Atan2` instead of `atan2f`, and hardware checks of
   the angle-to-PWM phase (Phase 3/5).
+- [ ] Resolver review leftovers (minor): a re-lock leaves a partial frequency
+  window (first 100 ms after re-lock reads low; reset `sm_samplesInWindow` on
+  the lock transition); the 500 Hz spike limit is a resolver electrical
+  frequency and may sit below top speed once `respolepairs` >= 2 (check in
+  Phase 5, or derive it from `fmax`); `CorrectResolverSample` range-checks the
+  gain but not the offset (a corrupt offset could overflow int32).
 - [ ] Resolver signal monitor limits: radius lock/unlock levels (600/350
   counts) and the 16-sample debounce are estimates, assumed centred samples.
   Check against real amplitude and offset on the bench (Phase 3). A single dead

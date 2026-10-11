@@ -137,3 +137,62 @@ TEST(ResolverCalibration, CalibratorStartWithZeroFrequencyFails)
     cal.Start(0);
     EXPECT_EQ(cal.GetState(), ResolverCalibrator::Failed);
 }
+
+//! Rock the shaft between two angles (no full turn) at a strong amplitude
+static void Rock(ResolverCalibrator& cal, double seconds, double fromDeg, double toDeg)
+{
+    const uint32_t samples = (uint32_t)(seconds * Pwm);
+    const double mid = (fromDeg + toDeg) / 2, half = (toDeg - fromDeg) / 2;
+    for (uint32_t i = 0; i < samples; i++)
+    {
+        double rad = (mid + half * sin(2 * M_PI * 1.0 * i / Pwm)) * M_PI / 180;
+        cal.Update((uint16_t)lround(2048 + 1800 * sin(rad)),
+                   (uint16_t)lround(2048 + 1800 * cos(rad)));
+    }
+}
+
+TEST(ResolverCalibration, CalibratorFailsOnPartialSwingWithStrongSignal)
+{
+    // 10..80 degrees at amplitude 1800 gives spreads above 1200 on both
+    // channels without a full turn; the offsets would be ~1000 counts off
+    ResolverCalibrator cal;
+    cal.Start(Pwm);
+    Rock(cal, 3, 10, 80);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Running);
+    Rock(cal, 27.1, 10, 80);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Failed);
+}
+
+TEST(ResolverCalibration, CalibratorIgnoresSingleGlitch)
+{
+    ResolverCalibrator cal;
+    cal.Start(Pwm);
+    Feed(cal, 0.5, 2048, 800, 2048, 800);
+    cal.Update(2048, 4095); // one bad cosine sample
+    Feed(cal, 2.5, 2048, 800, 2048, 800, 2, 360, 360);
+    ASSERT_EQ(cal.GetState(), ResolverCalibrator::Done);
+    EXPECT_NEAR(cal.SinOffset(), 2048, 2);
+    EXPECT_NEAR(cal.CosOffset(), 2048, 2);
+    EXPECT_NEAR(cal.CosGainPercent(), 100, 1);
+}
+
+TEST(ResolverCalibration, CalibratorAcceptsFullTurnsBackwards)
+{
+    ResolverCalibrator cal;
+    cal.Start(Pwm);
+    Feed(cal, 3, 2000, 800, 2100, 640, -2);
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Done);
+}
+
+TEST(ResolverCalibration, CalibratorAbortFailsWithoutResult)
+{
+    ResolverCalibrator cal;
+    cal.Start(Pwm);
+    Feed(cal, 1, 2000, 800, 2100, 640);
+    cal.Abort();
+    EXPECT_EQ(cal.GetState(), ResolverCalibrator::Failed);
+    // Abort when not running changes nothing
+    ResolverCalibrator idle;
+    idle.Abort();
+    EXPECT_EQ(idle.GetState(), ResolverCalibrator::Idle);
+}

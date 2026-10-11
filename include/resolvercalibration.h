@@ -2,6 +2,7 @@
 #ifndef RESOLVERCALIBRATION_H
 #define RESOLVERCALIBRATION_H
 
+#include <math.h>
 #include <stdint.h>
 
 namespace encoder {
@@ -14,6 +15,8 @@ static const int32_t ResolverMaxGainPercent = 200;
 // __STDC_LIMIT_MACROS
 static const int32_t ResolverInt16Max = 32767;
 static const int32_t ResolverInt16Min = -32768;
+
+static const float ResolverTwoPi = 6.28318531f;
 
 /** Centre a raw resolver ADC sample on its offset and scale it.
  * A gain outside [50, 200] % falls back to 100 % (fail safe against a corrupt
@@ -33,9 +36,13 @@ inline int16_t CorrectResolverSample(uint16_t raw, int32_t offset, int32_t gainP
 }
 
 /** Find per-channel offsets and the cosine gain while the shaft is turned.
- * Tracks the min/max of both raw channels. Once at least MinSeconds of samples
- * are in and both spreads reach MinSpread, it finishes: Done if the cosine gain
- * is within [50, 200] %, otherwise Failed. Failed too after TimeoutSeconds.
+ * Tracks the min/max of both raw channels, ignoring samples that jump more
+ * than MaxJump counts from the previous one (ADC glitches). It also tracks the
+ * unwrapped angle around the provisional centre, so a partial swing (rocking
+ * the shaft) never qualifies. Once at least MinSeconds of samples are in, both
+ * spreads reach MinSpread and the shaft has made a full electrical turn, it
+ * finishes: Done if the cosine gain is within [50, 200] %, otherwise Failed.
+ * Failed too after TimeoutSeconds.
  */
 class ResolverCalibrator
 {
@@ -52,11 +59,15 @@ public:
     static const int32_t  MinSpread = 1200;
     static const uint32_t MinSeconds = 2;
     static const uint32_t TimeoutSeconds = 30;
+    //! Largest plausible change between samples; a hand turn moves ~1 count
+    static const int32_t  MaxJump = 100;
 
     ResolverCalibrator()
         : state(Idle), minSamples(0), timeoutSamples(0), samples(0),
           sinMin(0), sinMax(0), cosMin(0), cosMax(0),
-          sinOffset(0), cosOffset(0), cosGainPercent(100)
+          sinOffset(0), cosOffset(0), cosGainPercent(100),
+          prevSin(0), prevCos(0), havePrev(false),
+          prevAngle(0.0f), haveAngle(false), turns(0.0f)
     {
     }
 
@@ -68,6 +79,9 @@ public:
         // Raw samples are uint16_t, so these start outside any real value
         sinMin = cosMin = 65536;
         sinMax = cosMax = -1;
+        havePrev = false;
+        haveAngle = false;
+        turns = 0.0f;
         // Without a sample rate there is no way to time the calibration
         state = pwmFrequency > 0 ? Running : Failed;
     }
@@ -77,15 +91,31 @@ public:
         if (state != Running)
             return;
 
-        if (rawSin < sinMin) sinMin = rawSin;
-        if (rawSin > sinMax) sinMax = rawSin;
-        if (rawCos < cosMin) cosMin = rawCos;
-        if (rawCos > cosMax) cosMax = rawCos;
         samples = samples + 1U;
+
+        // A sample far from the previous one is a glitch (and so is the one
+        // after it, which jumps back): skip both
+        const bool plausible = havePrev &&
+                               Abs((int32_t)rawSin - prevSin) <= MaxJump &&
+                               Abs((int32_t)rawCos - prevCos) <= MaxJump;
+        prevSin = rawSin;
+        prevCos = rawCos;
+        havePrev = true;
+
+        if (plausible)
+        {
+            if (rawSin < sinMin) sinMin = rawSin;
+            if (rawSin > sinMax) sinMax = rawSin;
+            if (rawCos < cosMin) cosMin = rawCos;
+            if (rawCos > cosMax) cosMax = rawCos;
+            TrackTurns(rawSin, rawCos);
+        }
 
         const int32_t sinSpread = sinMax - sinMin;
         const int32_t cosSpread = cosMax - cosMin;
-        if (samples >= minSamples && sinSpread >= MinSpread && cosSpread >= MinSpread)
+        const bool    fullTurn = fabsf(turns) >= ResolverTwoPi;
+        if (samples >= minSamples && sinSpread >= MinSpread &&
+            cosSpread >= MinSpread && fullTurn)
         {
             sinOffset = (sinMax + sinMin) / 2;
             cosOffset = (cosMax + cosMin) / 2;
@@ -101,18 +131,54 @@ public:
         }
     }
 
+    //! Stop a running calibration without a result
+    void Abort()
+    {
+        if (state == Running)
+            state = Failed;
+    }
+
     State   GetState() const { return state; }
     int32_t SinOffset() const { return sinOffset; }
     int32_t CosOffset() const { return cosOffset; }
     int32_t CosGainPercent() const { return cosGainPercent; }
 
 private:
+    static int32_t Abs(int32_t x) { return x < 0 ? -x : x; }
+
+    //! Accumulate the unwrapped angle around the provisional centre
+    void TrackTurns(uint16_t rawSin, uint16_t rawCos)
+    {
+        // Wait until the centre estimate means something
+        if (sinMax - sinMin < MinSpread / 4 || cosMax - cosMin < MinSpread / 4)
+            return;
+
+        const float angle = atan2f((float)((int32_t)rawSin - (sinMax + sinMin) / 2),
+                                   (float)((int32_t)rawCos - (cosMax + cosMin) / 2));
+        if (haveAngle)
+        {
+            float diff = angle - prevAngle;
+            if (diff > ResolverTwoPi / 2)
+                diff -= ResolverTwoPi;
+            else if (diff < -ResolverTwoPi / 2)
+                diff += ResolverTwoPi;
+            turns += diff;
+        }
+        prevAngle = angle;
+        haveAngle = true;
+    }
+
     State    state;
     uint32_t minSamples;
     uint32_t timeoutSamples;
     uint32_t samples;
     int32_t  sinMin, sinMax, cosMin, cosMax;
     int32_t  sinOffset, cosOffset, cosGainPercent;
+    int32_t  prevSin, prevCos;
+    bool     havePrev;
+    float    prevAngle;
+    bool     haveAngle;
+    float    turns;
 };
 
 } // namespace encoder

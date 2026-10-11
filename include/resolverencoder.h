@@ -69,9 +69,10 @@ public:
         sm_startupDelay = 4000;
         sm_lastAngle = 0.0f;
         sm_angle = 0.0f;
-        sm_poleCounter = 0;
+        sm_turnAccum = 0.0f;
         sm_turnsSinceLastSample = 0;
         sm_samplesInWindow = 0;
+        sm_resync = false;
         sm_resolverLocked = false;
         sm_resolverLockedPrev = false;
     }
@@ -96,20 +97,33 @@ public:
     {
         sm_angle = DecodeAngle();
 
-        if (sm_resolverLocked != sm_resolverLockedPrev)
+        if (sm_resolverLocked != sm_resolverLockedPrev || sm_resync)
         {
+            // Lock changed, or the output was re-armed: the step from the
+            // last angle is not rotor movement we saw
             sm_resolverLockedPrev = sm_resolverLocked;
+            sm_resync = false;
             sm_turnsSinceLastSample = 0;
         }
-        // Each wrap across 0/2pi is one resolver electrical turn, in either
-        // direction; respolepairs of them make one mechanical turn
-        else if (UpdateTurns())
+        else
         {
-            sm_poleCounter = sm_poleCounter + 1;
-            if (sm_poleCounter >= Param::GetInt(Param::respolepairs))
+            // Mechanical turns travelled, either direction: the signed angle
+            // since the last counted turn must reach 2pi * respolepairs, so
+            // jitter or rocking around any angle (including 0) cancels out
+            float signedDiff = UpdateTurns();
+            int32_t respolepairs = Param::GetInt(Param::respolepairs);
+            float turnLength =
+                details::TwoPi * (float)(respolepairs > 0 ? respolepairs : 1);
+            sm_turnAccum += signedDiff;
+            if (sm_turnAccum >= turnLength)
             {
                 sm_fullTurns++;
-                sm_poleCounter = 0;
+                sm_turnAccum -= turnLength;
+            }
+            else if (sm_turnAccum <= -turnLength)
+            {
+                sm_fullTurns++;
+                sm_turnAccum += turnLength;
             }
         }
 
@@ -161,9 +175,15 @@ public:
     static void SetPwmFrequency(uint32_t frq)
     {
         sm_pwmFrq = frq;
-        // A window spanning two sample periods would be timed wrongly
+        // Called on every output enable (PwmInit): re-arm the decoder. A
+        // window spanning two sample periods would be timed wrongly, the last
+        // estimate is stale after time with the output off, and the shaft may
+        // have moved since the last sample
         sm_samplesInWindow = 0;
         sm_turnsSinceLastSample = 0.0f;
+        sm_lastFrequency = 0.0f;
+        sm_detectedDirection = Stationary;
+        sm_resync = true;
     }
 
     //
@@ -228,18 +248,19 @@ private:
     //
     //! Accumulate the angle moved since the last sample
     //!
-    //! \return true if this step wrapped across 0/2pi
+    //! \return the signed angle moved since the last sample, unwrapped
     //!
-    static bool UpdateTurns()
+    static float UpdateTurns()
     {
         float signedDiff = sm_angle - sm_lastAngle;
-        bool  wrapped = fabsf(signedDiff) > details::Pi;
 
-        if (wrapped)
-            signedDiff += signedDiff < 0.0f ? details::TwoPi : -details::TwoPi;
+        if (signedDiff < -details::Pi) // 2pi -> 0: forwards
+            signedDiff += details::TwoPi;
+        else if (signedDiff > details::Pi) // 0 -> 2pi: backwards
+            signedDiff -= details::TwoPi;
 
         sm_turnsSinceLastSample += signedDiff;
-        return wrapped;
+        return signedDiff;
     }
 
     //
@@ -297,13 +318,16 @@ private:
     //! Last recorded rotor angle
     static float sm_lastAngle;
 
-    //! Resolver electrical turns since the last full mechanical turn
-    static int32_t sm_poleCounter;
+    //! Signed angle (rad) travelled since the last counted mechanical turn
+    static float sm_turnAccum;
 
     static float sm_turnsSinceLastSample;
 
     //! Samples in the current frequency window
     static uint32_t sm_samplesInWindow;
+
+    //! Set by SetPwmFrequency: take the next angle as the new reference
+    static bool sm_resync;
 
     //! True while the signal monitor reports a good signal; cleared by Reset()
     static bool sm_resolverLocked;
@@ -339,13 +363,16 @@ template <typename ResolverSampleT>
 float ResolverEncoder<ResolverSampleT>::sm_lastAngle;
 
 template <typename ResolverSampleT>
-int32_t ResolverEncoder<ResolverSampleT>::sm_poleCounter;
+float ResolverEncoder<ResolverSampleT>::sm_turnAccum;
 
 template <typename ResolverSampleT>
 float ResolverEncoder<ResolverSampleT>::sm_turnsSinceLastSample;
 
 template <typename ResolverSampleT>
 uint32_t ResolverEncoder<ResolverSampleT>::sm_samplesInWindow;
+
+template <typename ResolverSampleT>
+bool ResolverEncoder<ResolverSampleT>::sm_resync;
 
 template <typename ResolverSampleT>
 bool ResolverEncoder<ResolverSampleT>::sm_resolverLocked;
