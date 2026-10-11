@@ -15,13 +15,13 @@ Repo layout, toolchain, host tests, both C2000 images building, `main` pushed wi
 
 ### Phase 1: Harden the software (no hardware)
 Safety:
-- Implement over-current protection. `PwmDriver::SetOverCurrentLimits` is an empty stub and `ERR_OVERCURRENT` is never posted on the C2000. Either a comparator (CMPSS) into the Trip-Zone added by the HVIL change, or a software trip in the ISR.
-- Add a live resolver-signal check using the current sin²+cos². The latched peak amplitude in `encoder.cpp` can never report loss of signal.
+- Implement a software over-current trip. `PwmDriver::SetOverCurrentLimits` is an empty stub and `ERR_OVERCURRENT` is never posted on the C2000. Check the sampled phase currents against `ocurlim` in the control ISR and force the Trip-Zone added by the HVIL change (decision 1). The comparator (CMPSS) version is Phase 7.
+- Add a live resolver-signal check. The latched peak amplitude in `encoder.cpp` and the frozen min/max in `ResolverEncoder` can both never report loss of signal.
 - Check how `udclim`, `udcmin` and `udcmax` are used. Only derating was found; add an over- and under-voltage trip if missing.
 
 Correctness:
 - Audit every plain `int` in the control ISR path for 16-bit overflow on the C28x. Known: `syncadv` and `moddedfwkp` in `include/focpwmgeneration.h`. Add a host test that catches these (the host `int` is 32-bit and hides them).
-- Resolver: calibrate offset and gain of both channels; decide between the float `atan2f` decoder in `platform/c2000/inverter_drivers/encoder.cpp` and the unit-tested `ResolverEncoder` in `include/resolverencoder.h`.
+- Resolver (decision 2, hybrid): keep the host-testable `ResolverEncoder` template in `include/resolverencoder.h` as the structure, and bring in what `platform/c2000/inverter_drivers/encoder.cpp` got right on hardware: the amplitude check that works with the rotor parked at standstill, the 100 ms frequency calculation driven from the PWM ISR, spike rejection and holding the last angle on low amplitude. Fix the loss-of-signal check, calibrate offset and gain of both channels, and cover all of it with host tests. `c2000::Encoder` then becomes a thin wrapper around the template.
 - Move the MTPA constants in `libopeninv/src/foc.cpp` into parameters. Run with the d-axis current at zero for bring-up.
 - HVIL: re-check the 10 to 30 mA window against the actual loop wiring; decide whether to debounce.
 
@@ -44,7 +44,7 @@ Determine the pole-pair ratio, direction and zero offset (`respolepairs`, `synco
 Enable `RUN` with a tiny current limit and tune the d/q PI gains. Supply: 53 V pack through a precharge resistor, fuse and disconnect. Re-tune at this voltage; the controller has no DC-link normalisation.
 
 ### Phase 7: Prove the protections
-Inject each fault (HVIL open, resolver unplugged, over-current, over-voltage, over-temperature) and measure shutdown behaviour and latency. Stay at low power until every fault gives a safe, latched shutdown.
+Add the comparator (CMPSS) over-current trip into the Trip-Zone (decision 1) before going to higher power; this needs the current-sensor analog path to the MCU pins checked first. Inject each fault (HVIL open, resolver unplugged, over-current, over-voltage, over-temperature) and measure shutdown behaviour and latency. Stay at low power until every fault gives a safe, latched shutdown.
 
 ### Phase 8: Load and speed
 Raise torque and speed in steps. Watch heating, dead-time effects and ISR timing (`execTicks`).
@@ -55,17 +55,18 @@ Throttle and CAN control, the oil pump, a limp mode.
 ### Phase 10: Share
 Offer fixes back to the upstream fork as PRs. Report H-revision findings to the openinverter forum thread.
 
-## Open decisions
-1. Over-current protection: comparator into the Trip-Zone (most robust, needs a hardware check) or a software check first.
-2. Resolver decoder: keep the float version or return to the tested `ResolverEncoder`.
-3. Upstream: open PRs to the upstream fork as fixes land, or keep work here until the rear unit spins.
+## Decisions
+1. Over-current protection (decided): software trip in the ISR in Phase 1, comparator into the Trip-Zone in Phase 7 before higher power. The software trip covers moderate faults at bring-up limits; the gate drivers' DESAT (enabled in `gatedriver.cpp`, 8 V threshold; not verified on this board) covers hard shorts; the comparator closes the fast middle range.
+2. Resolver decoder (decided): hybrid, as described in Phase 1.
+3. Upstream (open): open PRs to the upstream fork as fixes land, or keep work here until the rear unit spins.
+4. Equipment (open): oscilloscope, current clamp or shunt, and a CAN adapter are needed from Phase 3; availability not yet confirmed.
 
 ## Appendix A: Code review findings (commit d52a194 plus the HVIL PR)
 
 The Clarke/Park transforms, inverse Park, min/max (SVPWM-equivalent) harmonic injection, voltage-circle limiting and PI anti-windup are correct. Issues in the C2000-specific layers, most severe first:
 
 1. Over-current protection is not implemented on the C2000 (`pwmdriver.cpp`, `SetOverCurrentLimits` stub).
-2. Resolver loss of signal is never detected after the first good signal (`encoder.cpp`, latched `s_resolverPeakAmplitude`).
+2. Resolver loss of signal is never detected after the first good signal (`encoder.cpp`, latched `s_resolverPeakAmplitude`). The tested `ResolverEncoder` has the same defect: its min/max update only while unlocked, so the unlock test can never fire. Conversely, `ResolverEncoder` only locks after the rotor has moved (min/max spread above 1200 counts), so it cannot start from standstill; `encoder.cpp` handles that case.
 3. 16-bit `int` overflow risks in the ISR path (`focpwmgeneration.h`: `syncadv`, `moddedfwkp`).
 4. Resolver decode uses fixed centre offset (`sincosofs` 2048), no gain/offset calibration, and float `atan2f` in a 12.2 kHz ISR.
 5. Rotor frequency is estimated over 100 ms windows, clamped at 200 Hz; it feeds angle advance, integral-gain scheduling and field weakening. `GetSpeed` divides by the motor pole pairs, not the resolver's: verify.
