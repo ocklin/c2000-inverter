@@ -7,7 +7,6 @@ add_library(
   oiltempcontroller.cpp
   param_save.cpp
   teslam3oilpump.cpp
-  encoder.cpp
   pmicspidriver.cpp
   pwmdriver.cpp
   gatedriver.cpp

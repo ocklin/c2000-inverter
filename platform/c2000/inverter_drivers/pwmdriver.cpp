@@ -26,6 +26,7 @@
 #include "hvilinterlock.h"
 #include "overcurrenttrip.h"
 #include "dclinktrip.h"
+#include "resolvercalibration.h"
 #include "c2000/encoder.h"
 #include "c2000/motoranalogcapture.h"
 #include "c2000/performancecounter.h"
@@ -36,6 +37,10 @@ namespace c2000 {
 static HvilInterlock hvilInterlock;
 static OverCurrentTrip overCurrentTrip;
 static DcLinkTrip dcLinkTrip;
+static encoder::ResolverCalibrator resolverCalibrator;
+
+/** PWM (control ISR) frequency in Hz, set when the PWM timers are set up */
+static uint32_t s_pwmFrequency = 0;
 
 /** Phase delay between the resolver exciter square wave and the phase PWM.
  * Measured as approx 32.8 uSec between centre of exciter square wave and peak
@@ -227,15 +232,50 @@ __interrupt void motor_control_adc_isr(void)
         Param::SetInt(Param::lasterr, ErrorMessage::GetLastError());
     }
 
+    // The controller decodes the resolver while running; keep the decoder
+    // tracking while off so the angle, speed and loss-of-signal check stay live
+    const bool outputOff = Param::GetInt(Param::opmode) == OFF;
+    if (outputOff)
+        Encoder::UpdateRotorAngle(0);
+
     PwmGeneration::Run();
 
-    static uint16_t s_freqUpdateCounter = 0;
-    if (++s_freqUpdateCounter >= 1220)
+    // The encoder times its own 100 ms frequency window
+    Param::SetInt(Param::speed, Encoder::GetSpeed());
+
+    // Resolver calibration: started by setting rescal to 1 while the output
+    // is off and the shaft is turned by hand. Writing new offsets while the
+    // motor runs would jump the angle under load, so only while off; clearing
+    // rescal or enabling the output aborts it
+    const bool calRequested = Param::GetInt(Param::rescal) == 1;
+    if (resolverCalibrator.GetState() == encoder::ResolverCalibrator::Running &&
+        (!calRequested || !outputOff))
     {
-        s_freqUpdateCounter = 0;
-        Encoder::UpdateRotorFrequency(10);
-        Param::SetInt(Param::speed, Encoder::GetSpeed());
+        resolverCalibrator.Abort();
+        Param::SetInt(Param::rescal, 0);
     }
+    else if (calRequested &&
+             resolverCalibrator.GetState() != encoder::ResolverCalibrator::Running)
+    {
+        if (outputOff)
+            resolverCalibrator.Start(s_pwmFrequency);
+        else
+            Param::SetInt(Param::rescal, 0);
+    }
+    if (resolverCalibrator.GetState() == encoder::ResolverCalibrator::Running)
+    {
+        resolverCalibrator.Update(
+            MotorAnalogCapture::ResolverSine(), MotorAnalogCapture::ResolverCosine());
+        if (resolverCalibrator.GetState() == encoder::ResolverCalibrator::Done)
+        {
+            Param::SetInt(Param::resofssin, resolverCalibrator.SinOffset());
+            Param::SetInt(Param::resofscos, resolverCalibrator.CosOffset());
+            Param::SetInt(Param::resgaincos, resolverCalibrator.CosGainPercent());
+        }
+        if (resolverCalibrator.GetState() != encoder::ResolverCalibrator::Running)
+            Param::SetInt(Param::rescal, 0);
+    }
+    Param::SetInt(Param::rescalstat, resolverCalibrator.GetState());
 
     // Measure the time - handles timer overflows
     uint32_t totalTime = startTime - PerformanceCounter::GetCount();
@@ -526,6 +566,7 @@ uint16_t PwmDriver::TimerSetup(
 
     // Disable sync(Freeze clock to PWM as well).
     SysCtl_disablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
+    s_pwmFrequency = EPWM_FREQ / (2UL * pwmmax);
     hvilInterlock.Configure(EPWM_FREQ / (2UL * pwmmax));
     // Require about 1 ms of consecutive under-voltage samples.
     dcLinkTrip.Configure((EPWM_FREQ / (2UL * pwmmax)) / 1000U + 1U);

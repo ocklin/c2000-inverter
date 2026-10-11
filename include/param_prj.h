@@ -24,14 +24,18 @@
    2. Temporary parameters (id = 0)
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 173
-//Next value Id: 2070
+//Next param id (increase when adding new parameter!): 179
+//Next value Id: 2071
 /*              category     name         unit       min     max     default id */
 
 #define MOTOR_PARAMETERS_COMMON \
     PARAM_ENTRY(CAT_MOTOR,   polepairs,   "",        1,      16,     2,      32  ) \
     PARAM_ENTRY(CAT_MOTOR,   respolepairs,"",        1,      16,     1,      93  ) \
     PARAM_ENTRY(CAT_MOTOR,   sincosofs,   "dig",     1,      4096L,  2048L,  131 ) \
+    PARAM_ENTRY(CAT_MOTOR,   resofssin,   "dig",     0,      4095,   2048,   175 ) \
+    PARAM_ENTRY(CAT_MOTOR,   resofscos,   "dig",     0,      4095,   2048,   176 ) \
+    PARAM_ENTRY(CAT_MOTOR,   resgaincos,  "%",       50,     200,    100,    177 ) \
+    PARAM_ENTRY(CAT_MOTOR,   rescal,      "",        0,      1,      0,      178 ) \
     PARAM_ENTRY(CAT_MOTOR,   encmode,     ENCMODES,  0,      5,      4,      75  ) \
     PARAM_ENTRY(CAT_MOTOR,   fmax,        "Hz",      21,     1000,   200,    9   ) \
     PARAM_ENTRY(CAT_MOTOR,   numimp,      "ppr",     8,      8192L,   60,     15  ) \
@@ -198,6 +202,7 @@
     VALUE_ENTRY(pmprev,      "rpm",   2066 ) \
     VALUE_ENTRY(hvilcur,     "mA",    2068 ) \
     VALUE_ENTRY(hvilstate,   HVILSTATES,2069 ) \
+    VALUE_ENTRY(rescalstat,  RESCALSTATES,2070 ) \
     VALUE_ENTRY(cpuload,     "%",     2035 ) \
 
 #define VALUES_SINE \
@@ -271,6 +276,7 @@
 #define ONOFF        "0=Off, 1=On, 2=na"
 #define OKERR        "0=Error, 1=Ok, 2=na"
 #define HVILSTATES   "0=Qualifying, 1=Ready, 2=Fault"
+#define RESCALSTATES "0=Idle, 1=Running, 2=Done, 3=Failed"
 #define CHARGEMODS   "0=Off, 3=Boost, 4=Buck"
 #define ENCMODES     "0=Single, 1=AB, 2=ABZ, 3=SPI, 4=Resolver, 5=SinCos"
 #define POTMODES     "0=SingleRegen, 1=DualChannel, 2=CAN, 3=CANDual"

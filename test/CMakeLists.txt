@@ -30,6 +30,7 @@ set(ISR_PATH_FILES
     include/sinepwmgeneration.h
     include/resolverencoder.h
     include/resolversignalmonitor.h
+    include/resolvercalibration.h
     include/overcurrenttrip.h
     include/dclinktrip.h
     include/hvilinterlock.h
@@ -40,8 +41,8 @@ set(ISR_PATH_FILES
     libopeninv/include/sine_core.h
     libopeninv/src/sine_core.cpp
     platform/c2000/inverter_drivers/pwmdriver.cpp
-    platform/c2000/inverter_drivers/encoder.cpp
     platform/c2000/inverter_drivers/c2000/encoder.h
+    platform/c2000/inverter_drivers/c2000/resolversample.h
     platform/c2000/inverter_drivers/motoranalogcapture.cpp)
 list(TRANSFORM ISR_PATH_FILES PREPEND ${PROJECT_SOURCE_DIR}/)
 add_executable(IsrIntWidthTest testisrintwidth.cpp)
@@ -61,6 +62,7 @@ file(
   testsinecore.cpp
   testresolverencoder.cpp
   testresolversignal.cpp
+  testresolvercalibration.cpp
   mockencoder.cpp
   mockpwmdriver.cpp
   mockresolversample.cpp)

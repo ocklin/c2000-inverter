@@ -32,7 +32,7 @@ Confirm 1120990-00-H against the documented -G units, then follow the power-up c
 Done when: the board boots RAM firmware repeatably and a baseline is recorded.
 
 ### Phase 3: Bench bring-up, no motor
-Check ADC channels (currents, DC link, temperatures), PWM waveforms at the MCU test points, and the resolver angle tracking a hand-turned shaft. Bus from the 12 to 20 V / 1 A supply.
+Check ADC channels (currents, DC link, temperatures), PWM waveforms at the MCU test points, and the resolver angle tracking a hand-turned shaft. Calibrate the resolver: set `rescal` to 1 and turn the shaft by hand until `rescalstat` reads 2 (Done), then `save`; 3 (Failed) means too small a swing, a weak or dead channel, or a 30 s timeout. Before any run, set `udcmin` below and `udclim` just above the bus voltage. Bus from the 12 to 20 V / 1 A supply.
 
 ### Phase 4: Motor open loop, low power
 Forced rotation (`MANUAL` opmode) at tiny current. Verify phase order, direction and current-sensor signs. Supply limited to 1 A and phase current limited to 3 to 5 A in software *(estimate)*.

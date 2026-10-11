@@ -291,7 +291,6 @@ void main(void)
         PowerWatchdog::Init() == PowerWatchdog::OK ? "OK" : "Fail");
 
     // Add periodic tasks: watchdog strobe (100ms)
-    // Note: taskUpdateRotorFrequency is called from the PWM ISR every 1220 cycles
     Scheduler::AddTask(taskStrobePowerWatchdog, 100);
 
     // Set up gate drivers — must be after PMIC init since gate PSU depends on
@@ -452,27 +451,21 @@ void main(void)
             PRINTF("Il1: %s A  Il2: %s A\n",
                 ftoa(il1str, FP_TOFLOAT(Param::Get(Param::il1)), 2),
                 ftoa(il2str, FP_TOFLOAT(Param::Get(Param::il2)), 2));
-            // Resolver — raw, offset-corrected, and calculated angle
+            // Resolver — raw, calibrated, and calculated angle
             {
-                int16_t sinRaw = (int16_t)MotorAnalogCapture::ResolverSine();
-                int16_t cosRaw = (int16_t)MotorAnalogCapture::ResolverCosine();
-                int16_t offset = (int16_t)Param::GetInt(Param::sincosofs);
-                int16_t sinC   = sinRaw - offset;
-                int16_t cosC   = cosRaw - offset;
-                char angleStr[16];
-                PRINTF("Resolver: raw(sin=%d cos=%d) centered(sin=%d cos=%d) angle=%s deg\n",
+                uint16_t sinRaw = MotorAnalogCapture::ResolverSine();
+                uint16_t cosRaw = MotorAnalogCapture::ResolverCosine();
+                int16_t  sinC   = CalibratedResolverSample::ResolverSine();
+                int16_t  cosC   = CalibratedResolverSample::ResolverCosine();
+                char angleStr[16], fstatStr[16];
+                PRINTF("Resolver: raw(sin=%d cos=%d) calibrated(sin=%d cos=%d) angle=%s deg\n",
                     (int)sinRaw, (int)cosRaw,
                     (int)sinC,   (int)cosC,
                     ftoa(angleStr, Param::GetFloat(Param::angle), 1));
-                char fstatStr[16], absTurnsStr[16];
-                char maxDiffStr[16];
-                PRINTF("Resolver: fstat=%s Hz  absTurns=%s rad  maxDiff=%s rad  samples=%u  speed=%d rpm\n",
+                PRINTF("Resolver: fstat=%s Hz  speed=%ld rpm  rescalstat=%d\n",
                     ftoa(fstatStr, Param::GetFloat(Param::fstat), 2),
-                    ftoa(absTurnsStr, Encoder::GetLastAbsTurns(), 3),
-                    ftoa(maxDiffStr, Encoder::GetLastMaxSignedDiff(), 4),
-                    (unsigned)Encoder::GetLastSampleCount(),
-                    Encoder::GetSpeed());
-                    //Param::GetInt(Param::speed)
+                    (long)Encoder::GetSpeed(),
+                    (int)Param::GetInt(Param::rescalstat));
             }
             // HVIL current
             char hvilStr[16];
