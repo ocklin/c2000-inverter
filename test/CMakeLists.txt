@@ -30,6 +30,7 @@ set(ISR_PATH_FILES
     include/sinepwmgeneration.h
     include/resolverencoder.h
     include/resolversignalmonitor.h
+    include/resolvercalibration.h
     include/overcurrenttrip.h
     include/dclinktrip.h
     include/hvilinterlock.h
@@ -61,6 +62,7 @@ file(
   testsinecore.cpp
   testresolverencoder.cpp
   testresolversignal.cpp
+  testresolvercalibration.cpp
   mockencoder.cpp
   mockpwmdriver.cpp
   mockresolversample.cpp)
