@@ -28,12 +28,28 @@ Working list; the phased plan is in `docs/RDU-FOC-bringup-plan.md`.
   trip uses the `udc` value as scaled in the ISR, which ignores `udcofs`.
 - [ ] DC-link trip: re-enable after a trip uses the same clear command as the
   over-current trip (`DcLinkTrip::Reset()` is not called anywhere yet).
-- [ ] Remaining Phase 1 items: live resolver-signal check,
+- [ ] **Resolver: make `c2000::Encoder` use `ResolverEncoder`.** The live
+  loss-of-signal check exists only in the host-testable
+  `include/resolverencoder.h`; `platform/c2000/inverter_drivers/encoder.cpp`
+  still has the latched `s_resolverPeakAmplitude`, so the hardware path is
+  unchanged. This is the hybrid decoder (decision 2): port the 100 ms
+  frequency calculation, spike rejection and calibration, then thin
+  `c2000::Encoder` into a wrapper.
+- [ ] Resolver signal monitor limits: radius lock/unlock levels (600/350
+  counts) and the 16-sample debounce are estimates, assumed centred samples.
+  Check against real amplitude and offset on the bench (Phase 3). A single dead
+  channel is not detected by the radius check while the rotor is parked near
+  the other channel's peak.
+- [ ] Remaining Phase 1 items:
   16-bit `int` overflow audit with a host test, resolver hybrid decoder, MTPA
   constants into parameters, HVIL window and debounce.
 
 ## Done
 
+- [x] Live resolver loss-of-signal check (`include/resolversignalmonitor.h`,
+  `test/testresolversignal.cpp`) in `ResolverEncoder`: locks at any parked
+  angle, unlocks when the signal disappears, holds the last angle. The angle is
+  now held until 16 good samples (the old code trusted the first sample).
 - [x] DC-link over- and under-voltage trip (`include/dclinktrip.h`,
   `test/testdclinktrip.cpp`), wired into the ISR; new `ERR_UNDERVOLTAGE`.
 - [x] Software over-current trip logic and ISR wiring, with host tests

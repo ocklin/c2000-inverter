@@ -135,7 +135,11 @@ TEST(TestResolverEncoder, StaticPosition)
         }
 
         EXPECT_EQ(Resolver::SeenNorthSignal(), true);
-        EXPECT_THAT(Resolver::GetRotorAngle(), IntNear(ComputedAngle, 1));
+        // The angle is held (at 0) until the signal monitor has locked
+        if (i >= encoder::ResolverSignalMonitor::DebounceSamples - 1)
+        {
+            EXPECT_THAT(Resolver::GetRotorAngle(), IntNear(ComputedAngle, 1));
+        }
         EXPECT_EQ(Resolver::GetRotorFrequency(), 0);
         EXPECT_EQ(Resolver::GetSpeed(), 0);
         EXPECT_EQ(Resolver::GetFullTurns(), 0);
@@ -203,4 +207,53 @@ TEST(TestResolverEncoder, LowAmplitude)
 
     // Verify that we trigger hit an error because of the low amplitude input
     EXPECT_EQ(ErrorMessage::GetLastError(), ERR_LORESAMP);
+}
+
+//! Run n update cycles with fixed sine/cosine values
+static void RunCycles(MockResolverSampleImpl& sample, int16_t sine, int16_t cosine, int n)
+{
+    EXPECT_CALL(sample, ResolverSine).Times(n).WillRepeatedly(Return(sine));
+    EXPECT_CALL(sample, ResolverCosine).Times(n).WillRepeatedly(Return(cosine));
+    for (int i = 0; i < n; i++)
+        Resolver::UpdateRotorAngle(1);
+}
+
+//! A healthy signal must lock whatever angle the rotor is parked at. At 45
+//! degrees sin == cos, so a running min/max spread never reaches the lock level.
+TEST(TestResolverEncoder, LocksWhenParkedAt45Degrees)
+{
+    ErrorMessage::ResetAll();
+    ErrorMessage::SetTime(1);
+    Resolver::Reset();
+
+    const int16_t level = 1500 * cos(45 * (pi / 180));
+    MockResolverSampleImpl sample;
+    RunCycles(sample, level, level, StartupCount + 1);
+
+    EXPECT_THAT(Resolver::GetRotorAngle(), IntNear((45 * 65536) / 360, 1));
+    EXPECT_EQ(ErrorMessage::GetLastError(), ERROR_NONE);
+}
+
+//! Losing the resolver signal after a good lock must be reported and the last
+//! angle held.
+TEST(TestResolverEncoder, SignalLossAfterLockIsReported)
+{
+    ErrorMessage::ResetAll();
+    ErrorMessage::SetTime(1);
+    Resolver::Reset();
+
+    const float   angle = 123.456;
+    const int16_t sine = 1800 * sin(angle * (pi / 180));
+    const int16_t cosine = 1800 * cos(angle * (pi / 180));
+
+    MockResolverSampleImpl sample;
+    RunCycles(sample, sine, cosine, StartupCount + 1);
+    ASSERT_EQ(ErrorMessage::GetLastError(), ERROR_NONE);
+    const uint16_t lockedAngle = Resolver::GetRotorAngle();
+
+    // Resolver unplugged: both channels read zero
+    RunCycles(sample, 0, 0, 100);
+
+    EXPECT_EQ(ErrorMessage::GetLastError(), ERR_LORESAMP);
+    EXPECT_EQ(Resolver::GetRotorAngle(), lockedAngle);
 }

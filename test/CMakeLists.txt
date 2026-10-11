@@ -35,6 +35,7 @@ file(
   testfocpwmgeneration.cpp
   testsinecore.cpp
   testresolverencoder.cpp
+  testresolversignal.cpp
   mockencoder.cpp
   mockpwmdriver.cpp
   mockresolversample.cpp)

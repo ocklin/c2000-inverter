@@ -25,6 +25,7 @@
 #include "my_fp.h"
 #include "my_math.h"
 #include "params.h"
+#include "resolversignalmonitor.h"
 #include <math.h>
 #include <stdint.h>
 
@@ -43,12 +44,6 @@ static const float TwoPi = 2 * Pi;
 //! Angle difference at which we assume jitter to become irrelevant
 static const float StableAngle = (10.0 * TwoPi) / 360.0;
 
-//! Amplitude threshold to acquire resolver lock
-static const uint16_t LockAmplitude = 1200;
-
-//! Amplitude threshold below which resolver lock is lost
-static const uint16_t UnlockAmplitude = 700;
-
 } // namespace details
 
 template <typename ResolverSampleT>
@@ -62,8 +57,7 @@ public:
     {
         sm_fullTurns = 0;
         sm_pwmFrq = 1;
-        sm_resolverMin = 0;
-        sm_resolverMax = 0;
+        sm_monitor.Reset();
         sm_lastFrequency = 0.0f;
         sm_detectedDirection = Stationary;
         sm_startupDelay = 4000;
@@ -237,28 +231,14 @@ private:
         int16_t sin = ResolverSampleT::ResolverSine();
         int16_t cos = ResolverSampleT::ResolverCosine();
 
-        if (!sm_resolverLocked)
-        {
-            int16_t temp = MIN(sin, cos);
-            sm_resolverMin = MIN(temp, sm_resolverMin);
-            temp = MAX(sin, cos);
-            sm_resolverMax = MAX(temp, sm_resolverMax);
+        sm_monitor.Update(sin, cos);
+        sm_resolverLocked = sm_monitor.Locked();
 
-            if ((sm_resolverMax - sm_resolverMin) > details::LockAmplitude)
-            {
-                sm_resolverLocked = true;
-            }
-            else
-            {
-                if (sm_startupDelay == 0)
-                    ErrorMessage::Post(ERR_LORESAMP);
-                return sm_angle;
-            }
-        }
-        else if ((sm_resolverMax - sm_resolverMin) < details::UnlockAmplitude)
+        if (!sm_monitor.SampleUsable())
         {
-            sm_resolverLocked = false;
-            if (sm_startupDelay == 0)
+            // Not locked yet, signal lost, or a bad sample while a loss is
+            // being debounced: hold the last angle
+            if (!sm_resolverLocked && sm_startupDelay == 0)
                 ErrorMessage::Post(ERR_LORESAMP);
             return sm_angle;
         }
@@ -273,11 +253,8 @@ private:
     //! PWM Frequency in Hz
     static uint32_t sm_pwmFrq;
 
-    //! Resolver signal minimum amplitude
-    static int32_t sm_resolverMin;
-
-    //! Resolver signal maximum amplitude
-    static int32_t sm_resolverMax;
+    //! Live signal-quality check driving the lock state
+    static ResolverSignalMonitor sm_monitor;
 
     //! Number of calls to UpdateRotorAngle() before we are happy to start
     //! normal operation
@@ -300,7 +277,7 @@ private:
 
     static float sm_turnsSinceLastSample;
 
-    //! True once resolver amplitude has reached LockAmplitude; cleared by Reset()
+    //! True while the signal monitor reports a good signal; cleared by Reset()
     static bool sm_resolverLocked;
 
     //! Previous value of sm_resolverLocked; used to detect lock state transitions
@@ -315,10 +292,7 @@ template <typename ResolverSampleT>
 uint32_t ResolverEncoder<ResolverSampleT>::sm_pwmFrq;
 
 template <typename ResolverSampleT>
-int32_t ResolverEncoder<ResolverSampleT>::sm_resolverMin;
-
-template <typename ResolverSampleT>
-int32_t ResolverEncoder<ResolverSampleT>::sm_resolverMax;
+ResolverSignalMonitor ResolverEncoder<ResolverSampleT>::sm_monitor;
 
 template <typename ResolverSampleT>
 int32_t ResolverEncoder<ResolverSampleT>::sm_startupDelay;
