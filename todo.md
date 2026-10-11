@@ -70,6 +70,42 @@ Working list; the phased plan is in `docs/RDU-FOC-bringup-plan.md`.
   of `respolepairs`, or the motor electrical frequency and angle are silently
   wrong (3 and 2 gives ratio 1). Check when the resolver pole pairs are known
   (Phase 5); reject or flag a non-integer ratio.
+- [ ] **Only `pwmfrq` = 1 (12.2 kHz) is valid on this board.** The resolver
+  exciter (EPWM1) shares the phase-PWM period, and `ResolverPhaseDelay` (3230
+  counts, tuned at 12.2 kHz) is a fixed counter start offset for the ADC and
+  phase EPWMs. At 24.4 kHz (period 2048) the offset exceeds the period; at
+  6.1 kHz the exciter frequency halves and the samples miss the sine peak.
+  Before anyone changes `pwmfrq`: lock it to 1 on the C2000 (reject or force
+  with a message), or decouple the exciter and scale the delay.
+- [ ] **Resolver signal loss while running does not stop the output.**
+  `ERR_LORESAMP` is `ERROR_DISPLAY`; the decoder holds the last angle and FOC
+  keeps commutating on it, then steps the angle at re-lock. Upstream hardware
+  history (5033f09): angle steps gave ~180 degree voltage jumps and 50 A+
+  spikes. Trip (Trip-Zone, opmode OFF, latched) on loss of lock in MANUAL/RUN,
+  like the other Phase 1 trips; host-test it via the generation templates.
+- [ ] **Verify the current gain on the rear unit before trusting `ocurlim`.**
+  Upstream FDU calibration (e1d9a8b): MLX91209 sensors, 1.64 dig/A (default
+  here 1.625), about 0.61 A per count; a wrong gain there once let 44 A flow
+  while the firmware saw 15 A (wire fire). The H-revision sensors are
+  unverified. At 3 to 5 A the trip is only 5 to 8 counts above the offset, so
+  expect noise; cross-check `idc` against the DC shunt (appendix D).
+- [ ] `execTicks > 16000` overrun flag (`pwmdriver.cpp`) assumes the 12.2 kHz
+  budget; derive it from the PWM period. The 4000-sample resolver startup delay
+  is time-dependent too (0.16 to 0.66 s).
+- [ ] From the code review (plan appendix A item 7), not yet scheduled: no
+  DC-link normalisation of the PI gains (re-tune per bus voltage, Phase 6); no
+  dead-time compensation; PI integral uses integer division by the PWM
+  frequency; sine lookup has no interpolation; ADC sampling instant versus the
+  PWM centre unverified (scope, Phase 3).
+- [ ] All trips (HVIL, over-current, DC link) run inside the control ISR and
+  fail under ISR starvation; the CMPSS comparator (Phase 7) covers only
+  over-current. (The HVIL review's "Post every cycle" concern is moot:
+  `ErrorMessage::Post` posts each error once.)
+- [ ] Pre-existing, seen in review: `SetOpmode` sets `opmode` before
+  `PwmInit`, so the ISR can run `Run()` mid-setup; the debug `printf` runs with
+  interrupts disabled.
+- [ ] Phase 5 reference: upstream ran the FDU with `polepairs` = 3 and
+  `respolepairs` = 3 (a473b7c); the rear unit may differ.
 - [ ] Remaining Phase 1 item: HVIL window and debounce.
 
 ## Done
