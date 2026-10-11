@@ -9,6 +9,8 @@
 > * [techn0zahrt-ctrl/c2000-inverter-M3-Y](https://github.com/techn0zahrt-ctrl/c2000-inverter-M3-Y) `portable-cpp` at `d52a194` (2026-09-28), itself a fork of [davefiddes/c2000-inverter](https://github.com/davefiddes/c2000-inverter), and
 > * the two commits of the **unmerged** pull request [techn0zahrt-ctrl/c2000-inverter-M3-Y#1](https://github.com/techn0zahrt-ctrl/c2000-inverter-M3-Y/pull/1) (latched HVIL protection, by komeil-gh). It adds the `CONTROL=SINE|FOC` CMake option, without which the FOC build fails on Chris's branch.
 >
+> The bring-up plan for the rear unit is in [docs/RDU-FOC-bringup-plan.md](docs/RDU-FOC-bringup-plan.md).
+>
 > Original authorship is preserved in the git history. Build with `-DPLATFORM=c2000 -DCONTROL=FOC` for the rear unit.
 >
 > **Status:** host tests pass (SINE 35/35, FOC 44/44) and both C2000 RAM images build with TI C2000-CGT 25.11.1.LTS. Nothing from this branch has been run on rear-unit hardware yet. The HVIL change is not validated on hardware either (its 10-30 mA window is provisional). A code review found open issues, among them: `PwmDriver::SetOverCurrentLimits` is an unimplemented stub, the resolver loss-of-signal check latches its amplitude peak, and some `int` uses in the control ISR are 16-bit on the C28x.
