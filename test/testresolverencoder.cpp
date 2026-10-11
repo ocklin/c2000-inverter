@@ -257,3 +257,97 @@ TEST(TestResolverEncoder, SignalLossAfterLockIsReported)
     EXPECT_EQ(ErrorMessage::GetLastError(), ERR_LORESAMP);
     EXPECT_EQ(Resolver::GetRotorAngle(), lockedAngle);
 }
+
+//! Common setup for the rotation tests
+static void ResetResolver()
+{
+    ErrorMessage::ResetAll();
+    ErrorMessage::SetTime(1);
+    Param::LoadDefaults();
+    Resolver::Reset();
+    Resolver::SetPwmFrequency(DefaultPwmFrequency);
+}
+
+//! Feed the resolver a signal whose angle starts at startDeg and moves by
+//! degPerSample each update. DecodeAngle() reads sine first, so the phase
+//! advances after each cosine read.
+static void RotateResolver(MockResolverSampleImpl& sample, float startDeg,
+                           float degPerSample, int samples,
+                           int16_t amplitude = 1800)
+{
+    double phase = startDeg;
+    EXPECT_CALL(sample, ResolverSine)
+        .Times(samples)
+        .WillRepeatedly(::testing::Invoke([&phase, amplitude]() {
+            return (int16_t)lround(amplitude * sin(phase * (pi / 180)));
+        }));
+    EXPECT_CALL(sample, ResolverCosine)
+        .Times(samples)
+        .WillRepeatedly(::testing::Invoke([&phase, amplitude, degPerSample]() {
+            int16_t value = (int16_t)lround(amplitude * cos(phase * (pi / 180)));
+            phase += degPerSample;
+            return value;
+        }));
+    for (int i = 0; i < samples; i++)
+        Resolver::UpdateRotorAngle(1);
+}
+
+TEST(TestResolverEncoder, NegativeHalfAngleMapsToUpperRange)
+{
+    ResetResolver();
+    MockResolverSampleImpl sample;
+    RotateResolver(sample, 250, 0, StartupCount + 1);
+    // One ADC count at amplitude 1800 is about 1/1800 rad, ~5.8 angle counts
+    EXPECT_THAT(Resolver::GetRotorAngle(), IntNear((250 * 65536) / 360, 8));
+}
+
+TEST(TestResolverEncoder, FullTurnsCountedPerMechanicalTurn)
+{
+    ResetResolver();
+    Param::SetInt(Param::respolepairs, 1);
+    MockResolverSampleImpl sample;
+    RotateResolver(sample, 10, 3, 5 * 120);
+    EXPECT_EQ(Resolver::GetFullTurns(), 5u);
+}
+
+TEST(TestResolverEncoder, FullTurnsHonourResolverPolePairs)
+{
+    ResetResolver();
+    Param::SetInt(Param::respolepairs, 2);
+    MockResolverSampleImpl sample;
+    RotateResolver(sample, 10, 3, 6 * 120);
+    EXPECT_EQ(Resolver::GetFullTurns(), 3u);
+}
+
+TEST(TestResolverEncoder, FullTurnsCountedInBothDirections)
+{
+    ResetResolver();
+    Param::SetInt(Param::respolepairs, 1);
+    MockResolverSampleImpl sample;
+    // Start at 90 so the first zero crossing comes after the 16-sample lock-in
+    RotateResolver(sample, 90, -3, 4 * 120);
+    EXPECT_EQ(Resolver::GetFullTurns(), 4u);
+}
+
+TEST(TestResolverEncoder, NoFullTurnWithoutCrossingZero)
+{
+    ResetResolver();
+    Param::SetInt(Param::respolepairs, 1);
+    MockResolverSampleImpl sample;
+    // Swing 120..240 degrees: crosses 180 but never 0/360
+    double phase = 180;
+    double step = 3;
+    EXPECT_CALL(sample, ResolverSine).Times(2000).WillRepeatedly(::testing::Invoke([&]() {
+        return (int16_t)lround(1800 * sin(phase * (pi / 180)));
+    }));
+    EXPECT_CALL(sample, ResolverCosine).Times(2000).WillRepeatedly(::testing::Invoke([&]() {
+        int16_t value = (int16_t)lround(1800 * cos(phase * (pi / 180)));
+        if (phase + step > 240 || phase + step < 120)
+            step = -step;
+        phase += step;
+        return value;
+    }));
+    for (int i = 0; i < 2000; i++)
+        Resolver::UpdateRotorAngle(1);
+    EXPECT_EQ(Resolver::GetFullTurns(), 0u);
+}

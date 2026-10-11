@@ -37,12 +37,12 @@ namespace details {
 //! Number of integer counts that represent a full rotation of the rotor
 static const uint32_t FullRotationInt = 65536;
 
-static const float Pi = 3.14159265359;
+static const float Pi = 3.14159265359f;
 
-static const float TwoPi = 2 * Pi;
+static const float TwoPi = 2.0f * Pi;
 
 //! Angle difference at which we assume jitter to become irrelevant
-static const float StableAngle = (10.0 * TwoPi) / 360.0;
+static const float StableAngle = (10.0f * TwoPi) / 360.0f;
 
 } // namespace details
 
@@ -99,18 +99,15 @@ public:
         }
         sm_resolverLockedPrev = sm_resolverLocked;
 
-        UpdateTurns();
-
-        if ((sm_lastAngle <= details::Pi) && (sm_angle > details::Pi))
+        // Each wrap across 0/2pi is one resolver electrical turn, in either
+        // direction; respolepairs of them make one mechanical turn
+        if (UpdateTurns())
         {
-            if (sm_poleCounter == 0)
+            sm_poleCounter = sm_poleCounter + 1;
+            if (sm_poleCounter >= Param::GetInt(Param::respolepairs))
             {
                 sm_fullTurns++;
-                sm_poleCounter = Param::GetInt(Param::respolepairs);
-            }
-            else
-            {
-                sm_poleCounter--;
+                sm_poleCounter = 0;
             }
         }
 
@@ -156,7 +153,8 @@ public:
     //
     static uint16_t GetRotorAngle()
     {
-        return (uint16_t)((sm_angle * details::FullRotationInt) / details::TwoPi);
+        // Via uint32_t: an angle that rounds to exactly 2pi wraps to 0
+        return (uint16_t)(uint32_t)((sm_angle * details::FullRotationInt) / details::TwoPi);
     }
 
     //
@@ -202,22 +200,20 @@ private:
 
 private:
     //
-    //! Figure out how many rotations we have had
+    //! Accumulate the angle moved since the last sample
     //!
-    static void UpdateTurns()
+    //! \return true if this step wrapped across 0/2pi
+    //!
+    static bool UpdateTurns()
     {
         float signedDiff = sm_angle - sm_lastAngle;
-        float absDiff = fabs(signedDiff);
-        int32_t sign = signedDiff < 0 ? -1 : 1;
+        bool  wrapped = fabsf(signedDiff) > details::Pi;
 
-        if (absDiff > details::Pi) // wrap detection
-        {
-            sign = -sign;
-            signedDiff += sign * details::TwoPi;
-            absDiff = fabs(signedDiff);
-        }
+        if (wrapped)
+            signedDiff += signedDiff < 0.0f ? details::TwoPi : -details::TwoPi;
 
         sm_turnsSinceLastSample += signedDiff;
+        return wrapped;
     }
 
     //
@@ -243,7 +239,10 @@ private:
             return sm_angle;
         }
 
-        return atan2(sin, cos);
+        // atan2f gives (-pi, pi]; store [0, 2pi) so GetRotorAngle() never
+        // converts a negative float to uint16_t
+        float angle = atan2f((float)sin, (float)cos);
+        return angle < 0.0f ? angle + details::TwoPi : angle;
     }
 
 private:
@@ -272,7 +271,7 @@ private:
     //! Last recorded rotor angle
     static float sm_lastAngle;
 
-    //! Number of poles we have seen in the current rotation
+    //! Resolver electrical turns since the last full mechanical turn
     static int32_t sm_poleCounter;
 
     static float sm_turnsSinceLastSample;
