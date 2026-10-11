@@ -57,6 +57,11 @@ Working list; the phased plan is in `docs/RDU-FOC-bringup-plan.md`.
   gives id = -249 instead of about -409). Irrelevant while `lqminusld` is 0.
 - [ ] `FocPwmGeneration::SetTorquePercent` reads `fluxlink`/`lqminusld` on each
   call; there is no host test at the generation level for that wiring.
+- [ ] **`polePairRatio` is integer division** (`polepairs / respolepairs` in
+  `Param::Change`, `inverter_main.cpp`): `polepairs` must be a whole multiple
+  of `respolepairs`, or the motor electrical frequency and angle are silently
+  wrong (3 and 2 gives ratio 1). Check when the resolver pole pairs are known
+  (Phase 5); reject or flag a non-integer ratio.
 - [ ] Remaining Phase 1 items: resolver hybrid decoder, HVIL window and
   debounce.
 
